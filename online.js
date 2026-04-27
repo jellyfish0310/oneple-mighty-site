@@ -6,8 +6,11 @@
 let supabase = null;
 
 function initSupabase() {
-  if (!ONLINE_CONFIG.SUPABASE_URL || ONLINE_CONFIG.SUPABASE_URL === 'YOUR_SUPABASE_URL') return false;
-  supabase = window.supabase.createClient(ONLINE_CONFIG.SUPABASE_URL, ONLINE_CONFIG.SUPABASE_ANON_KEY);
+  if (!ONLINE_CONFIG || !ONLINE_CONFIG.SUPABASE_URL || ONLINE_CONFIG.SUPABASE_URL === 'YOUR_SUPABASE_URL') return false;
+  if (!window.supabase) { console.error('Supabase SDK not loaded'); return false; }
+  if (!supabase) {
+    supabase = window.supabase.createClient(ONLINE_CONFIG.SUPABASE_URL, ONLINE_CONFIG.SUPABASE_ANON_KEY);
+  }
   return true;
 }
 
@@ -113,18 +116,24 @@ function getWinner(trick, giru, mightyId, jokerCallerId, noGiru) {
 
 // ── 방 목록 페이지 ─────────────────────────────────────────
 async function loadOnlinePage() {
-  if (!supabase && !initSupabase()) {
-    document.getElementById('online-content').innerHTML = `
-      <div class="online-error">
-        <p>⚠️ Supabase 설정이 필요해요!</p>
-        <p style="font-size:0.85rem;color:var(--text-muted);margin-top:0.5rem">config.js에서 SUPABASE_URL과 SUPABASE_ANON_KEY를 입력해주세요.</p>
-      </div>`;
-    return;
+  // Supabase 초기화 - 최대 3초 대기
+  if (!supabase) {
+    for (let i = 0; i < 10; i++) {
+      if (window.supabase) { initSupabase(); break; }
+      await new Promise(r => setTimeout(r, 300));
+    }
   }
 
   // 닉네임 확인
   if (!onlineState.myName) {
     showNicknameModal();
+    return;
+  }
+
+  if (!supabase) {
+    document.getElementById('online-content').innerHTML =
+      '<div class="online-error"><p>⚠️ Supabase 연결 실패</p>' +
+      '<button class="game-btn btn-primary" style="margin-top:1rem" onclick="loadOnlinePage()">다시 시도</button></div>';
     return;
   }
 
@@ -217,13 +226,6 @@ function changeNickname() {
 }
 
 // ── 방 만들기 ──────────────────────────────────────────────
-function showCreateRoom() {
-  document.getElementById('create-room-modal').classList.remove('hidden');
-}
-
-function hideCreateRoom() {
-  document.getElementById('create-room-modal').classList.add('hidden');
-}
 
 async function createRoom() {
   const name = document.getElementById('room-name-input').value.trim();
@@ -1104,8 +1106,20 @@ function renderCardHTML(card, clickable = false, clickFn = '', showId = false) {
 
 // ── 튜토리얼 ──────────────────────────────────────────────
 function showTutorial() {
-  document.getElementById('tutorial-modal').classList.remove('hidden');
+  const el = document.getElementById('tutorial-modal');
+  if (el) el.classList.remove('hidden');
 }
 function hideTutorial() {
-  document.getElementById('tutorial-modal').classList.add('hidden');
+  const el = document.getElementById('tutorial-modal');
+  if (el) el.classList.add('hidden');
+}
+
+// ── 방 만들기 모달 ─────────────────────────────────────────
+function showCreateRoom() {
+  const el = document.getElementById('create-room-modal');
+  if (el) el.classList.remove('hidden');
+}
+function hideCreateRoom() {
+  const el = document.getElementById('create-room-modal');
+  if (el) el.classList.add('hidden');
 }
