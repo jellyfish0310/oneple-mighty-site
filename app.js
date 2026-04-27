@@ -306,10 +306,38 @@ function adminLogin() {
 function loadAdminPage() {
   document.getElementById('admin-semester-display').textContent = state.currentSemester;
 
-  // 로그 불러오기
+  // 항상 최신 로컬 데이터 불러오기
   const savedLogs = localStorage.getItem('mighty_logs');
-  if (savedLogs) state.logData = JSON.parse(savedLogs);
+  state.logData = savedLogs ? JSON.parse(savedLogs) : {};
 
+  // 구글 시트에서 최신 로그 동기화 시도
+  if (CONFIG.SCRIPT_URL && CONFIG.SCRIPT_URL !== 'YOUR_GOOGLE_APPS_SCRIPT_URL_HERE') {
+    syncLogsFromSheet();
+  } else {
+    renderAdminLogs();
+    renderSemesterList();
+  }
+}
+
+async function syncLogsFromSheet() {
+  try {
+    const url = CONFIG.SCRIPT_URL + '?action=getLogs&semester=' + encodeURIComponent(state.currentSemester);
+    const res = await fetch(url);
+    const data = await res.json();
+    if (data && data.logs) {
+      // 구글 시트 기준으로 로컬 업데이트
+      const sheetIds = new Set(data.logs.map(l => String(l.id)));
+      if (state.logData[state.currentSemester]) {
+        state.logData[state.currentSemester] = state.logData[state.currentSemester]
+          .filter(log => sheetIds.has(String(log.id)));
+        localStorage.setItem('mighty_logs', JSON.stringify(state.logData));
+        updateRankingFromLogs();
+        localStorage.setItem('mighty_ranking', JSON.stringify(state.rankingData));
+      }
+    }
+  } catch(e) {
+    console.warn('시트 동기화 실패, 로컬 사용:', e);
+  }
   renderAdminLogs();
   renderSemesterList();
 }
@@ -449,8 +477,9 @@ function showModal(message, onConfirm) {
   document.getElementById('modal-overlay').classList.remove('hidden');
   modalCallback = onConfirm;
   document.getElementById('modal-yes').onclick = () => {
+    const cb = modalCallback;
     closeModal();
-    if (modalCallback) modalCallback();
+    if (cb) cb();
   };
 }
 
