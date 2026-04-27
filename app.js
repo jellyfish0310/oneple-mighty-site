@@ -365,7 +365,7 @@ function deleteSelected() {
 
   showModal(`선택한 ${selected.length}개의 기록을 삭제하시겠습니까?\n랭킹에도 반영됩니다.`, () => {
     const sem = state.currentSemester;
-    state.logData[sem] = (state.logData[sem] || []).filter(log => !selected.includes(log.id));
+    state.logData[sem] = (state.logData[sem] || []).filter(log => !selected.includes(String(log.id)));
     localStorage.setItem('mighty_logs', JSON.stringify(state.logData));
     updateRankingFromLogs();
     localStorage.setItem('mighty_ranking', JSON.stringify(state.rankingData));
