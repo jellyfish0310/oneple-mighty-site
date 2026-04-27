@@ -1,0 +1,237 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ONEPLE 마이티</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Black+Han+Sans&family=Noto+Sans+KR:wght@400;500;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <!-- MAIN PAGE -->
+  <div id="page-main" class="page active">
+    <div class="main-container">
+      <div class="main-logo-area">
+        <img src="logo.png" alt="ONEPLE" class="main-logo" />
+        <p class="main-subtitle">마이티 사이트</p>
+      </div>
+      <nav class="main-nav">
+        <button class="nav-btn btn-primary" onclick="showPage('page-calculator')">
+          <span class="nav-icon">🃏</span>
+          <span>마이티 점수 계산기</span>
+        </button>
+        <button class="nav-btn btn-secondary" onclick="showPage('page-ranking')">
+          <span class="nav-icon">🏆</span>
+          <span>랭킹 확인</span>
+        </button>
+        <button class="nav-btn btn-admin" onclick="showPage('page-admin-login')">
+          <span class="nav-icon">🔐</span>
+          <span>관리자 페이지</span>
+        </button>
+      </nav>
+      <p class="main-footer">개발자 : 정해림 &nbsp;|&nbsp; Powered by ONEPLE</p>
+    </div>
+  </div>
+
+  <!-- CALCULATOR PAGE -->
+  <div id="page-calculator" class="page">
+    <div class="sub-container">
+      <header class="sub-header">
+        <button class="back-btn" onclick="showPage('page-main')">← 뒤로</button>
+        <div class="sub-logo">
+          <img src="logo.png" alt="ONEPLE" class="header-logo" />
+          <span class="header-title">마이티 점수 계산</span>
+        </div>
+      </header>
+
+      <div class="card">
+        <div class="input-group">
+          <label>주공</label>
+          <input type="text" id="inp-jugong" placeholder="이름 입력" />
+        </div>
+        <div class="input-group" id="friend-group">
+          <label class="label-friend">프렌드</label>
+          <input type="text" id="inp-friend" placeholder="이름 입력" />
+        </div>
+        <div class="input-group">
+          <label>시민 1</label>
+          <input type="text" id="inp-c1" placeholder="이름 입력" />
+        </div>
+        <div class="input-group">
+          <label>시민 2</label>
+          <input type="text" id="inp-c2" placeholder="이름 입력" />
+        </div>
+        <div class="input-group">
+          <label>시민 3</label>
+          <input type="text" id="inp-c3" placeholder="이름 입력" />
+        </div>
+
+        <div class="divider"></div>
+
+        <div class="input-group">
+          <label>공약</label>
+          <input type="number" id="inp-gongak" placeholder="13 ~ 20" min="13" max="20" />
+        </div>
+        <div class="input-group">
+          <label>점수</label>
+          <input type="number" id="inp-score" placeholder="획득 점수" min="0" max="20" />
+        </div>
+
+        <div class="checkbox-row">
+          <label class="checkbox-label">
+            <input type="checkbox" id="chk-nofriend" onchange="toggleNoFriend()" />
+            <span class="checkmark"></span>
+            노프렌드
+          </label>
+          <label class="checkbox-label">
+            <input type="checkbox" id="chk-nogiru" />
+            <span class="checkmark"></span>
+            노기루
+          </label>
+        </div>
+
+        <button class="calc-btn" onclick="calculate()">결과 보기</button>
+
+        <div id="result-area" class="result-area hidden">
+          <div class="result-header">
+            <span class="result-title">점수 변동 결과</span>
+            <span id="result-badge" class="result-badge"></span>
+          </div>
+          <div id="result-list" class="result-list"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- RANKING PAGE -->
+  <div id="page-ranking" class="page">
+    <div class="sub-container">
+      <header class="sub-header">
+        <button class="back-btn" onclick="showPage('page-main')">← 뒤로</button>
+        <div class="sub-logo">
+          <img src="logo.png" alt="ONEPLE" class="header-logo" />
+          <span class="header-title">마이티 랭킹</span>
+        </div>
+      </header>
+
+      <div class="card">
+        <div class="semester-nav">
+          <button class="semester-arrow" onclick="changeSemester(-1)">◀</button>
+          <span class="semester-badge" id="current-semester-display">26-1</span>
+          <button class="semester-arrow" onclick="changeSemester(1)">▶</button>
+        </div>
+
+        <div id="ranking-loading" class="loading-msg">랭킹 불러오는 중...</div>
+        <table class="ranking-table" id="ranking-table">
+          <thead>
+            <tr>
+              <th>등수</th>
+              <th>이름</th>
+              <th>점수</th>
+            </tr>
+          </thead>
+          <tbody id="ranking-body"></tbody>
+        </table>
+        <p id="ranking-empty" class="empty-msg hidden">이번 학기 기록이 없어요.</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- ADMIN LOGIN PAGE -->
+  <div id="page-admin-login" class="page">
+    <div class="sub-container center-v">
+      <div class="card admin-login-card">
+        <div class="sub-logo" style="justify-content:center;margin-bottom:1.5rem;">
+          <img src="logo.png" alt="ONEPLE" class="header-logo" />
+          <span class="header-title">관리자 페이지</span>
+        </div>
+        <h2 class="admin-login-title">비밀 번호 입력</h2>
+        <div class="admin-pw-row">
+          <input type="password" id="admin-pw-input" placeholder="비밀번호" onkeydown="if(event.key==='Enter')adminLogin()" />
+          <button class="admin-confirm-btn" onclick="adminLogin()">확인</button>
+        </div>
+        <p id="admin-login-error" class="error-msg hidden">비밀번호가 틀립니다.</p>
+        <button class="back-link" onclick="showPage('page-main')">메인 화면으로 돌아가기</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ADMIN MAIN PAGE -->
+  <div id="page-admin-main" class="page">
+    <div class="sub-container">
+      <header class="sub-header">
+        <button class="back-btn" onclick="showPage('page-main')">← 메인</button>
+        <div class="sub-logo">
+          <img src="logo.png" alt="ONEPLE" class="header-logo" />
+          <span class="header-title">관리자 전용 페이지</span>
+        </div>
+      </header>
+
+      <div class="admin-controls">
+        <button class="admin-action-btn btn-blue" onclick="showPage('page-admin-pw')">비밀번호 변경하기</button>
+        <div class="semester-control">
+          <button class="admin-action-btn btn-teal semester-toggle" onclick="toggleSemesterPanel()">
+            현재 학기 : <span id="admin-semester-display">26-1</span> ▼
+          </button>
+          <div id="semester-panel" class="semester-panel hidden">
+            <p class="semester-panel-title">학기 선택</p>
+            <div id="semester-list" class="semester-list"></div>
+            <button class="new-semester-btn" onclick="createNewSemester()">+ 새 학기 만들기</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="log-section">
+        <div class="log-header-row">
+          <label class="checkbox-label">
+            <input type="checkbox" id="chk-select-all" onchange="toggleSelectAll(this)" />
+            <span class="checkmark"></span>
+            전체 선택
+          </label>
+          <button class="delete-btn" onclick="deleteSelected()">선택 목록 삭제</button>
+        </div>
+        <div id="log-list" class="log-list">
+          <p class="loading-msg">기록 불러오는 중...</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ADMIN PASSWORD CHANGE PAGE -->
+  <div id="page-admin-pw" class="page">
+    <div class="sub-container center-v">
+      <div class="card admin-login-card">
+        <header class="sub-header" style="margin-bottom:1.5rem;">
+          <button class="back-btn" onclick="showPage('page-admin-main')">← 뒤로</button>
+          <span class="header-title" style="color:var(--accent-red);font-weight:800;">비밀번호 변경</span>
+        </header>
+        <div class="input-group">
+          <label>현재 비밀번호</label>
+          <input type="password" id="pw-current" placeholder="현재 비밀번호" />
+        </div>
+        <div class="input-group">
+          <label>바꿀 비밀번호</label>
+          <input type="text" id="pw-new" placeholder="새 비밀번호 (그대로 표시)" />
+        </div>
+        <p id="pw-change-error" class="error-msg hidden">현재 비밀번호가 틀립니다.</p>
+        <button class="calc-btn" style="margin-top:1rem;" onclick="changePassword()">변경하기</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL -->
+  <div id="modal-overlay" class="modal-overlay hidden" onclick="closeModal()">
+    <div class="modal-box" onclick="event.stopPropagation()">
+      <p id="modal-message"></p>
+      <div class="modal-btns">
+        <button id="modal-yes" class="modal-btn btn-confirm">예</button>
+        <button id="modal-no" class="modal-btn btn-cancel" onclick="closeModal()">아니오</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="config.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
