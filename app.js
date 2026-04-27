@@ -473,19 +473,21 @@ function changePassword() {
 let modalCallback = null;
 
 function showModal(message, onConfirm) {
+  modalCallback = onConfirm;
   document.getElementById('modal-message').textContent = message;
   document.getElementById('modal-overlay').classList.remove('hidden');
-  modalCallback = onConfirm;
-  document.getElementById('modal-yes').onclick = () => {
-    const cb = modalCallback;
-    closeModal();
-    if (cb) cb();
-  };
+}
+
+function confirmModal() {
+  const cb = modalCallback;
+  modalCallback = null;
+  document.getElementById('modal-overlay').classList.add('hidden');
+  if (cb) cb();
 }
 
 function closeModal() {
-  document.getElementById('modal-overlay').classList.add('hidden');
   modalCallback = null;
+  document.getElementById('modal-overlay').classList.add('hidden');
 }
 
 // ── 초기화 ─────────────────────────────────────────────────
