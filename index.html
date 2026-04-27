@@ -25,6 +25,10 @@
           <span class="nav-icon">🏆</span>
           <span>랭킹 확인</span>
         </button>
+        <button class="nav-btn btn-online" onclick="showPage('page-online')">
+          <span class="nav-icon">🎮</span>
+          <span>온라인 마이티</span>
+        </button>
         <button class="nav-btn btn-admin" onclick="showPage('page-admin-login')">
           <span class="nav-icon">🔐</span>
           <span>관리자 페이지</span>
@@ -231,7 +235,99 @@
     </div>
   </div>
 
+  <!-- ONLINE LOBBY PAGE -->
+  <div id="page-online" class="page">
+    <div class="sub-container">
+      <header class="sub-header">
+        <button class="back-btn" onclick="showPage('page-main')">← 뒤로</button>
+        <div class="sub-logo">
+          <img src="logo.png" alt="ONEPLE" class="header-logo" />
+          <span class="header-title">온라인 마이티</span>
+        </div>
+        <div style="margin-left:auto;display:flex;gap:0.5rem">
+          <button class="tutorial-btn" onclick="showTutorial()">📖 룰 보기</button>
+          <button class="create-room-btn" onclick="showCreateRoom()">+ 방 만들기</button>
+        </div>
+      </header>
+      <div id="online-content">
+        <div class="loading-msg">불러오는 중...</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ONLINE GAME PAGE -->
+  <div id="page-online-game" class="page">
+    <div class="sub-container">
+      <header class="sub-header">
+        <button class="back-btn" onclick="confirmLeave()">← 나가기</button>
+        <div class="sub-logo">
+          <img src="logo.png" alt="ONEPLE" class="header-logo" />
+          <span class="header-title" id="game-room-title">마이티 게임</span>
+        </div>
+      </header>
+      <div id="game-area">
+        <div class="loading-msg">게임 로딩 중...</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- CREATE ROOM MODAL -->
+  <div id="create-room-modal" class="modal-overlay hidden" onclick="hideCreateRoom()">
+    <div class="modal-box" onclick="event.stopPropagation()" style="max-width:340px">
+      <h3 style="margin-bottom:1.25rem;color:var(--navy);font-weight:800">방 만들기</h3>
+      <div class="input-group" style="margin-bottom:0.75rem">
+        <label>방 이름</label>
+        <input type="text" id="room-name-input" placeholder="방 이름 입력" maxlength="20" />
+      </div>
+      <div class="input-group" style="margin-bottom:0.75rem">
+        <label>라운드</label>
+        <select id="room-rounds-input" style="border:1.5px solid var(--border);border-radius:10px;padding:0.6rem 0.85rem;font-size:0.95rem;width:100%">
+          <option value="5">5라운드</option>
+          <option value="10">10라운드</option>
+          <option value="15">15라운드</option>
+          <option value="20">20라운드</option>
+        </select>
+      </div>
+      <div class="input-group" style="margin-bottom:1.25rem">
+        <label>비밀번호</label>
+        <input type="text" id="room-pw-input" placeholder="없으면 비워두세요" maxlength="20" />
+      </div>
+      <div class="modal-btns">
+        <button class="modal-btn btn-confirm" onclick="createRoom()">만들기</button>
+        <button class="modal-btn btn-cancel" onclick="hideCreateRoom()">취소</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- TUTORIAL MODAL -->
+  <div id="tutorial-modal" class="modal-overlay hidden" onclick="hideTutorial()">
+    <div class="modal-box" onclick="event.stopPropagation()" style="max-width:420px;max-height:80vh;overflow-y:auto;text-align:left">
+      <h3 style="margin-bottom:1rem;color:var(--navy);font-weight:800;text-align:center">🃏 마이티 룰</h3>
+      <div class="tutorial-content">
+        <h4>기본 구성</h4>
+        <p>5인 게임 · 53장(52장+조커) · 각자 10장, 바닥 3장</p>
+        <h4>카드 강약 (기루 있을 때)</h4>
+        <p>조커 > 마이티(스A, 기루가 스페이드면 다A) > 기루패 > 선패 문양 > 나머지</p>
+        <h4>비딩</h4>
+        <p>13~20 사이로 공약 선언. 시작자는 패스 불가. 20 선언시 자동 종료.</p>
+        <h4>바닥패</h4>
+        <p>주공이 바닥 3장을 가져와 13장 중 3장을 버림. 공약 변경 가능 (확인 전 +1, 확인 후 +2)</p>
+        <h4>프렌드</h4>
+        <p>특정 카드를 가진 사람이 프렌드. 노프렌드 선언 가능(배율 2배)</p>
+        <h4>딜미스</h4>
+        <p>10,J,Q,K,A=+1점, 조커=-1점 합계가 0이하면 딜미스 가능. 10원 납부 후 재딜링.</p>
+        <h4>승패</h4>
+        <p>주공팀 획득 점수 ≥ 공약 → 주공 승리 / 미달 → 시민 승리</p>
+        <h4>특수 규칙</h4>
+        <p>런(20점): 배율 2배 / 백런(10점 미만): 배율 2배 / 노기루: 배율 2배 / 노프렌드: 배율 2배 (중복 적용)</p>
+      </div>
+      <button class="modal-btn btn-confirm" style="width:100%;margin-top:1rem" onclick="hideTutorial()">닫기</button>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="config.js"></script>
   <script src="app.js"></script>
+  <script src="online.js"></script>
 </body>
 </html>

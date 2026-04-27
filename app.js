@@ -25,6 +25,7 @@ function showPage(pageId) {
   // 페이지별 초기화
   if (pageId === 'page-ranking') loadRanking();
   if (pageId === 'page-admin-main') loadAdminPage();
+  if (pageId === 'page-online') loadOnlinePage();
   if (pageId === 'page-admin-login') {
     document.getElementById('admin-pw-input').value = '';
     document.getElementById('admin-login-error').classList.add('hidden');
@@ -481,3 +482,13 @@ function closeModal() {
   updateRankingFromLogs();
   showPage('page-main');
 })();
+
+function confirmLeave() {
+  if (onlineState && onlineState.currentRoom) {
+    showModal('게임 중에 나가시겠어요?', function() {
+      leaveRoom(onlineState.currentRoom);
+    });
+  } else {
+    showPage('page-online');
+  }
+}
