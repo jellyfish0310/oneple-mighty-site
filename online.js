@@ -3,13 +3,13 @@
 // ============================================================
 
 // ── Supabase 클라이언트 ────────────────────────────────────
-let supabase = null;
+let sbClient = null;
 
 function initSupabase() {
   if (!ONLINE_CONFIG || !ONLINE_CONFIG.SUPABASE_URL || ONLINE_CONFIG.SUPABASE_URL === 'YOUR_SUPABASE_URL') return false;
   if (!window.supabase) { console.error('Supabase SDK not loaded'); return false; }
-  if (!supabase) {
-    supabase = window.supabase.createClient(ONLINE_CONFIG.SUPABASE_URL, ONLINE_CONFIG.SUPABASE_ANON_KEY);
+  if (!sbClient) {
+    sbClient = window.sbClient.createClient(ONLINE_CONFIG.SUPABASE_URL, ONLINE_CONFIG.SUPABASE_ANON_KEY);
   }
   return true;
 }
@@ -117,7 +117,7 @@ function getWinner(trick, giru, mightyId, jokerCallerId, noGiru) {
 // ── 방 목록 페이지 ─────────────────────────────────────────
 async function loadOnlinePage() {
   // Supabase 초기화 - 최대 3초 대기
-  if (!supabase) {
+  if (!sbClient) {
     for (let i = 0; i < 10; i++) {
       if (window.supabase) { initSupabase(); break; }
       await new Promise(r => setTimeout(r, 300));
@@ -130,7 +130,7 @@ async function loadOnlinePage() {
     return;
   }
 
-  if (!supabase) {
+  if (!sbClient) {
     document.getElementById('online-content').innerHTML =
       '<div class="online-error"><p>⚠️ Supabase 연결 실패</p>' +
       '<button class="game-btn btn-primary" style="margin-top:1rem" onclick="loadOnlinePage()">다시 시도</button></div>';
@@ -166,7 +166,7 @@ async function loadRoomList() {
   const content = document.getElementById('online-content');
   content.innerHTML = `<div class="loading-msg">방 목록 불러오는 중...</div>`;
 
-  const { data: rooms, error } = await supabase
+  const { data: rooms, error } = await sbClient
     .from('rooms')
     .select('*')
     .eq('status', 'waiting')
@@ -235,7 +235,7 @@ async function createRoom() {
   if (!name) { alert('방 이름을 입력해주세요!'); return; }
 
   const roomId = Date.now().toString();
-  const { error } = await supabase.from('rooms').insert({
+  const { error } = await sbClient.from('rooms').insert({
     id: roomId,
     name,
     host: onlineState.myName,
@@ -254,7 +254,7 @@ async function createRoom() {
 
 // ── 방 입장 ────────────────────────────────────────────────
 async function joinRoom(roomId) {
-  const { data: room } = await supabase.from('rooms').select('*').eq('id', roomId).single();
+  const { data: room } = await sbClient.from('rooms').select('*').eq('id', roomId).single();
   if (!room) { alert('방을 찾을 수 없어요.'); return; }
 
   if (room.password) {
@@ -271,7 +271,7 @@ async function joinRoom(roomId) {
   if (players.length >= 5) { alert('방이 꽉 찼어요.'); return; }
 
   players.push(onlineState.myName);
-  await supabase.from('rooms').update({ players }).eq('id', roomId);
+  await sbClient.from('rooms').update({ players }).eq('id', roomId);
   onlineState.currentRoom = roomId;
   showWaitingRoom(roomId);
 }
@@ -279,7 +279,7 @@ async function joinRoom(roomId) {
 // ── 대기실 ─────────────────────────────────────────────────
 async function showWaitingRoom(roomId) {
   showPage('page-online-game');
-  const { data: room } = await supabase.from('rooms').select('*').eq('id', roomId).single();
+  const { data: room } = await sbClient.from('rooms').select('*').eq('id', roomId).single();
   renderWaitingRoom(room);
 
   if (onlineState.subscription) onlineState.subscription.unsubscribe();
@@ -328,16 +328,16 @@ function renderWaitingRoom(room) {
 }
 
 async function leaveRoom(roomId) {
-  const { data: room } = await supabase.from('rooms').select('*').eq('id', roomId).single();
+  const { data: room } = await sbClient.from('rooms').select('*').eq('id', roomId).single();
   if (!room) { showPage('page-online'); return; }
 
   let players = (room.players || []).filter(p => p !== onlineState.myName);
 
   if (players.length === 0) {
-    await supabase.from('rooms').delete().eq('id', roomId);
+    await sbClient.from('rooms').delete().eq('id', roomId);
   } else {
     const newHost = room.host === onlineState.myName ? players[0] : room.host;
-    await supabase.from('rooms').update({ players, host: newHost }).eq('id', roomId);
+    await sbClient.from('rooms').update({ players, host: newHost }).eq('id', roomId);
   }
 
   if (onlineState.subscription) onlineState.subscription.unsubscribe();
@@ -349,7 +349,7 @@ async function leaveRoom(roomId) {
 
 // ── 게임 시작 ──────────────────────────────────────────────
 async function startGame(roomId) {
-  const { data: room } = await supabase.from('rooms').select('*').eq('id', roomId).single();
+  const { data: room } = await sbClient.from('rooms').select('*').eq('id', roomId).single();
   const players = room.players;
 
   // 카드 배분
@@ -357,7 +357,7 @@ async function startGame(roomId) {
   const firstBidder = players[Math.floor(Math.random() * players.length)];
 
   const gsId = roomId + '_1';
-  await supabase.from('game_states').insert({
+  await sbClient.from('game_states').insert({
     id: gsId,
     room_id: roomId,
     round: 1,
@@ -374,12 +374,12 @@ async function startGame(roomId) {
     deal_miss_pot: 0,
   });
 
-  await supabase.from('rooms').update({ status: 'playing', current_round: 1 }).eq('id', roomId);
+  await sbClient.from('rooms').update({ status: 'playing', current_round: 1 }).eq('id', roomId);
 }
 
 async function loadGameState(roomId) {
-  const { data: room } = await supabase.from('rooms').select('*').eq('id', roomId).single();
-  const { data: gs } = await supabase.from('game_states')
+  const { data: room } = await sbClient.from('rooms').select('*').eq('id', roomId).single();
+  const { data: gs } = await sbClient.from('game_states')
     .select('*').eq('room_id', roomId).order('round', { ascending: false }).limit(1).single();
   onlineState.currentRoom = roomId;
   onlineState.gameState = gs;
@@ -430,14 +430,14 @@ function renderDealMissPhase(gs) {
 
 async function declareDealMiss() {
   const gs = onlineState.gameState;
-  const room = await supabase.from('rooms').select('*').eq('id', onlineState.currentRoom).single();
+  const room = await sbClient.from('rooms').select('*').eq('id', onlineState.currentRoom).single();
   const players = room.data.players;
   const idx = players.indexOf(onlineState.myName);
   const nextPlayer = players[(idx + 1) % players.length];
 
   // 새로 딜링
   const { hands, floorCards } = dealCards(players);
-  await supabase.from('game_states').update({
+  await sbClient.from('game_states').update({
     hands,
     floor_cards: floorCards,
     deal_miss_pot: (gs.deal_miss_pot || 0) + 10,
@@ -448,7 +448,7 @@ async function declareDealMiss() {
 
 async function passDealMiss() {
   const gs = onlineState.gameState;
-  const room = await supabase.from('rooms').select('*').eq('id', onlineState.currentRoom).single();
+  const room = await sbClient.from('rooms').select('*').eq('id', onlineState.currentRoom).single();
   const players = room.data.players;
   const idx = players.indexOf(onlineState.myName);
   const nextIdx = (idx + 1) % players.length;
@@ -457,14 +457,14 @@ async function passDealMiss() {
   // 모두 패스하면 비딩 시작
   const checkedCount = (gs.deal_miss_checked || 0) + 1;
   if (checkedCount >= players.length) {
-    await supabase.from('game_states').update({
+    await sbClient.from('game_states').update({
       phase: 'bidding',
       current_turn: gs.bid_start_player,
       bids: {},
       updated_at: new Date().toISOString(),
     }).eq('id', gs.id);
   } else {
-    await supabase.from('game_states').update({
+    await sbClient.from('game_states').update({
       current_turn: nextPlayer,
       deal_miss_checked: checkedCount,
       updated_at: new Date().toISOString(),
@@ -520,7 +520,7 @@ function renderBiddingPhase(gs) {
 
 async function placeBid() {
   const gs = onlineState.gameState;
-  const room = await supabase.from('rooms').select('*').eq('id', onlineState.currentRoom).single();
+  const room = await sbClient.from('rooms').select('*').eq('id', onlineState.currentRoom).single();
   const players = room.data.players;
   const amount = parseInt(document.getElementById('bid-amount').value);
   const suit = document.getElementById('bid-suit').value;
@@ -530,7 +530,7 @@ async function placeBid() {
   // 20 선언시 나머지 자동패스
   if (amount >= 20) {
     players.forEach(p => { if (p !== onlineState.myName) bids[p] = { passed: true }; });
-    await supabase.from('game_states').update({
+    await sbClient.from('game_states').update({
       bids,
       jugong: onlineState.myName,
       contract: amount,
@@ -549,7 +549,7 @@ async function placeBid() {
     const winner = Object.entries(bids)
       .filter(([, b]) => !b.passed)
       .sort((a, b) => b[1].amount - a[1].amount)[0];
-    await supabase.from('game_states').update({
+    await sbClient.from('game_states').update({
       bids,
       jugong: winner[0],
       contract: winner[1].amount,
@@ -560,7 +560,7 @@ async function placeBid() {
       updated_at: new Date().toISOString(),
     }).eq('id', gs.id);
   } else {
-    await supabase.from('game_states').update({
+    await sbClient.from('game_states').update({
       bids,
       current_turn: nextPlayer,
       updated_at: new Date().toISOString(),
@@ -570,7 +570,7 @@ async function placeBid() {
 
 async function passBid() {
   const gs = onlineState.gameState;
-  const room = await supabase.from('rooms').select('*').eq('id', onlineState.currentRoom).single();
+  const room = await sbClient.from('rooms').select('*').eq('id', onlineState.currentRoom).single();
   const players = room.data.players;
   const bids = { ...(gs.bids || {}), [onlineState.myName]: { passed: true } };
 
@@ -581,14 +581,14 @@ async function passBid() {
       .sort((a, b) => b[1].amount - a[1].amount)[0];
     if (!winner) {
       // 전원 패스 - 비딩 재시작
-      await supabase.from('game_states').update({
+      await sbClient.from('game_states').update({
         bids: {},
         current_turn: gs.bid_start_player,
         updated_at: new Date().toISOString(),
       }).eq('id', gs.id);
       return;
     }
-    await supabase.from('game_states').update({
+    await sbClient.from('game_states').update({
       bids,
       jugong: winner[0],
       contract: winner[1].amount,
@@ -599,7 +599,7 @@ async function passBid() {
       updated_at: new Date().toISOString(),
     }).eq('id', gs.id);
   } else {
-    await supabase.from('game_states').update({
+    await sbClient.from('game_states').update({
       bids,
       current_turn: nextPlayer,
       updated_at: new Date().toISOString(),
@@ -712,10 +712,10 @@ async function confirmFloorCards() {
 
   const newHands = { ...gs.hands, [onlineState.myName]: newHand };
 
-  const room = await supabase.from('rooms').select('*').eq('id', onlineState.currentRoom).single();
+  const room = await sbClient.from('rooms').select('*').eq('id', onlineState.currentRoom).single();
   const players = room.data.players;
 
-  await supabase.from('game_states').update({
+  await sbClient.from('game_states').update({
     hands: newHands,
     floor_cards: newFloor,
     contract: finalContract,
@@ -767,11 +767,11 @@ async function selectFriend() {
   const rank = document.getElementById('friend-rank').value;
   const friendCard = suit + rank;
 
-  const room = await supabase.from('rooms').select('*').eq('id', onlineState.currentRoom).single();
+  const room = await sbClient.from('rooms').select('*').eq('id', onlineState.currentRoom).single();
   const players = room.data.players;
   const firstPlayer = players[players.indexOf(gs.jugong)];
 
-  await supabase.from('game_states').update({
+  await sbClient.from('game_states').update({
     friend_card: friendCard,
     no_friend: false,
     phase: 'playing',
@@ -782,7 +782,7 @@ async function selectFriend() {
 
 async function declareNoFriend() {
   const gs = onlineState.gameState;
-  await supabase.from('game_states').update({
+  await sbClient.from('game_states').update({
     friend_card: null,
     friend: null,
     no_friend: true,
@@ -870,7 +870,7 @@ async function playCard(cardId) {
     friend = onlineState.myName;
   }
 
-  const room = await supabase.from('rooms').select('*').eq('id', onlineState.currentRoom).single();
+  const room = await sbClient.from('rooms').select('*').eq('id', onlineState.currentRoom).single();
   const players = room.data.players;
 
   if (currentTrick.length === 5) {
@@ -892,14 +892,14 @@ async function playCard(cardId) {
 
     // 모든 트릭 완료?
     if (tricks.length >= 10) {
-      await supabase.from('game_states').update({
+      await sbClient.from('game_states').update({
         hands: newHands, current_trick: [], tricks, scores, friend,
         phase: 'round_end',
         current_turn: null,
         updated_at: new Date().toISOString(),
       }).eq('id', gs.id);
     } else {
-      await supabase.from('game_states').update({
+      await sbClient.from('game_states').update({
         hands: newHands, current_trick: [], tricks, scores, friend,
         current_turn: winner,
         updated_at: new Date().toISOString(),
@@ -909,7 +909,7 @@ async function playCard(cardId) {
     // 다음 플레이어
     const idx = players.indexOf(onlineState.myName);
     const nextPlayer = players[(idx + 1) % players.length];
-    await supabase.from('game_states').update({
+    await sbClient.from('game_states').update({
       hands: newHands, current_trick: currentTrick, friend,
       current_turn: nextPlayer,
       updated_at: new Date().toISOString(),
@@ -1010,7 +1010,7 @@ function renderRoundEndPhase(gs) {
     </div>`;
 
   // 자동으로 총점 업데이트
-  supabase.from('game_states').update({
+  sbClient.from('game_states').update({
     total_scores: totalScores,
     updated_at: new Date().toISOString(),
   }).eq('id', gs.id);
@@ -1018,14 +1018,14 @@ function renderRoundEndPhase(gs) {
 
 async function nextRound(totalScores) {
   const gs = onlineState.gameState;
-  const room = await supabase.from('rooms').select('*').eq('id', onlineState.currentRoom).single();
+  const room = await sbClient.from('rooms').select('*').eq('id', onlineState.currentRoom).single();
   const roomData = room.data;
   const players = roomData.players;
   const nextRound = gs.round + 1;
 
   if (nextRound > roomData.max_rounds) {
     // 게임 종료
-    await supabase.from('game_states').update({
+    await sbClient.from('game_states').update({
       phase: 'game_end',
       updated_at: new Date().toISOString(),
     }).eq('id', gs.id);
@@ -1039,7 +1039,7 @@ async function nextRound(totalScores) {
   const { hands, floorCards } = dealCards(players);
   const gsId = onlineState.currentRoom + '_' + nextRound;
 
-  await supabase.from('game_states').insert({
+  await sbClient.from('game_states').insert({
     id: gsId,
     room_id: onlineState.currentRoom,
     round: nextRound,
@@ -1056,7 +1056,7 @@ async function nextRound(totalScores) {
     deal_miss_pot: 0,
   });
 
-  await supabase.from('rooms').update({ current_round: nextRound }).eq('id', onlineState.currentRoom);
+  await sbClient.from('rooms').update({ current_round: nextRound }).eq('id', onlineState.currentRoom);
 }
 
 // ── 게임 종료 ──────────────────────────────────────────────
