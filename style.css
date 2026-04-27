@@ -73,7 +73,6 @@ body {
 .main-logo {
   width: 200px;
   max-width: 80vw;
-  filter: brightness(0) invert(1);
   margin-bottom: 0.6rem;
 }
 
