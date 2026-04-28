@@ -10,8 +10,8 @@
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.39.7/dist/umd/supabase.min.js"></script>
   <script>
     // SDK 로드 직후 즉시 별도 변수에 저장 (이후 충돌 방지)
-    window._supabaseSDK = window.supabase;
-    console.log('SDK saved:', typeof window._supabaseSDK, !!window._supabaseSDK.createClient);
+    window.__sb__ = window.supabase;
+    console.log('SDK saved:', typeof window.__sb__, !!(window.__sb__ && window.__sb__.createClient));
   </script>
 </head>
 <body>
