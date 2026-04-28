@@ -529,16 +529,11 @@ function renderBiddingPhase(gs) {
   const currentMaxIsNogiru = currentMaxVal % 1 !== 0;
 
   // 가능한 비딩 옵션 계산
-  const options = [];
-  for (let n = 13; n <= 20; n++) {
-    ['스','다','클','하','노기루'].forEach(suit => {
-      const val = n + (suit === '노기루' ? 0.5 : 0);
-      if (val > currentMaxVal) options.push({n, suit});
-    });
-  }
-
   const currentMaxDisplay = currentMaxVal === 12 ? '-' : 
     currentMaxAmount + (currentMaxIsNogiru ? ' 노기루' : '');
+
+  // 가능한 최소 숫자: 현재 최고가 노기루면 같은 숫자도 가능(기루로), 아니면 +1
+  const minAmount = currentMaxIsNogiru ? currentMaxAmount : currentMaxAmount + 1;
 
   document.getElementById('game-area').innerHTML = `
     <div class="game-phase-container">
@@ -557,10 +552,18 @@ function renderBiddingPhase(gs) {
       </div>
       ${isMyTurn ? `
         <div class="action-area">
-          <p class="action-hint">비딩하세요</p>
+          <p class="action-hint">비딩하세요 (최소 ${minAmount})</p>
           <div class="bid-controls">
-            <select id="bid-select">
-              ${options.map(o => `<option value="${o.n}_${o.suit}">${o.n} ${o.suit === '노기루' ? '노기루' : o.suit}</option>`).join('')}
+            <select id="bid-amount">
+              ${Array.from({length: 20 - minAmount + 1}, (_, i) => minAmount + i)
+                .map(n => `<option value="${n}">${n}</option>`).join('')}
+            </select>
+            <select id="bid-suit">
+              <option value="스">♠ 스페이드</option>
+              <option value="다">◆ 다이아</option>
+              <option value="클">♣ 클럽</option>
+              <option value="하">♥ 하트</option>
+              <option value="노기루">노기루</option>
             </select>
           </div>
           <div class="bid-btns">
@@ -575,9 +578,16 @@ async function placeBid() {
   const gs = onlineState.gameState;
   const room = await sbClient.from('rooms').select('*').eq('id', onlineState.currentRoom).single();
   const players = room.data.players;
-  const selected = document.getElementById('bid-select').value;
-  const [amountStr, suit] = selected.split('_');
-  const amount = parseInt(amountStr);
+  const amount = parseInt(document.getElementById('bid-amount').value);
+  const suit = document.getElementById('bid-suit').value;
+  
+  // 노기루 우선순위 검증
+  const currentMaxVal = getCurrentMaxBid(gs.bids);
+  const bidVal = amount + (suit === '노기루' ? 0.5 : 0);
+  if (bidVal <= currentMaxVal) {
+    alert('현재 최고 비딩보다 높아야 해요!');
+    return;
+  }
 
   const bids = { ...(gs.bids || {}), [onlineState.myName]: { amount, suit } };
 
@@ -814,20 +824,21 @@ async function confirmFloorCards() {
   const newHand = fullHand.filter(c => !window._discardSet.has(c.id));
   const newFloor = fullHand.filter(c => window._discardSet.has(c.id));
 
-  const newContract = parseInt(document.getElementById('new-contract').value);
+  const newContract = document.getElementById('new-contract').value;
   const newSuit = document.getElementById('new-suit').value;
 
   let finalContract = gs.contract;
   let finalSuit = gs.contract_suit;
 
-  const newContractNum = newContract ? parseInt(newContract) : 0;
+  const newContractVal = newContract && newContract !== '' ? parseInt(newContract) : 0;
   if (newSuit && newSuit !== '') {
-    // 문양 변경: +2
-    finalContract = Math.min(20, Math.max(newContractNum || gs.contract, gs.contract) + 2);
+    // 문양 변경: 기존 공약 + 2 (최대 20)
+    const base = newContractVal > gs.contract ? newContractVal : gs.contract;
+    finalContract = Math.min(20, base + 2);
     finalSuit = newSuit;
-  } else if (newContractNum > gs.contract) {
-    // 숫자만 변경: +2
-    finalContract = Math.min(20, newContractNum + 2);
+  } else if (newContractVal > 0) {
+    // 숫자만 변경: 선택값 + 2 (최대 20)
+    finalContract = Math.min(20, newContractVal + 2);
   }
 
   const newHands = { ...gs.hands, [onlineState.myName]: newHand };
