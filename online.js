@@ -191,7 +191,9 @@ async function loadRoomList() {
   if (onlineState.roomSubscription) onlineState.roomSubscription.unsubscribe();
   onlineState.roomSubscription = sbClient
     .channel('rooms-list')
-    .on('postgres_changes', { event: '*', schema: 'public', table: 'rooms' }, () => loadRoomList())
+    .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'rooms' }, () => loadRoomList())
+    .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'rooms' }, () => loadRoomList())
+    .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'rooms' }, () => loadRoomList())
     .subscribe();
 }
 
@@ -304,8 +306,9 @@ async function showWaitingRoom(roomId) {
   if (onlineState.subscription) onlineState.subscription.unsubscribe();
   onlineState.subscription = sbClient
     .channel('room-' + roomId)
-    .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'rooms', filter: 'id=eq.' + roomId },
+    .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'rooms' },
       async (payload) => {
+        if (payload.new.id !== roomId) return;
         onlineState.roomData = payload.new;
         if (payload.new.status === 'playing') {
           await loadGameState(roomId);
@@ -313,8 +316,9 @@ async function showWaitingRoom(roomId) {
           renderWaitingRoom(payload.new);
         }
       })
-    .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'game_states', filter: 'room_id=eq.' + roomId },
+    .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'game_states' },
       async (payload) => {
+        if (payload.new.room_id !== roomId) return;
         onlineState.gameState = payload.new;
         renderGame();
       })
