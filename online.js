@@ -1259,11 +1259,76 @@ function renderRoundEndPhase(gs) {
         </button>` : '<p class="waiting-hint">방장이 다음 라운드를 시작할 때까지 기다려주세요...</p>'}
     </div>`;
 
-  // 자동으로 총점 업데이트
+  // 자동으로 총점 업데이트 + 구글 시트/랭킹 저장
   sbClient.from('game_states').update({
     total_scores: totalScores,
     updated_at: new Date().toISOString(),
   }).eq('id', gs.id);
+
+  // 주공(방장)만 구글 시트에 저장 (중복 방지)
+  if (onlineState.myName === gs.jugong && CONFIG.SCRIPT_URL && CONFIG.SCRIPT_URL !== 'YOUR_GOOGLE_APPS_SCRIPT_URL_HERE') {
+    saveOnlineRoundToSheet(gs, players, pointChanges, totalScores, jugongWon);
+  }
+}
+
+async function saveOnlineRoundToSheet(gs, players, pointChanges, totalScores, jugongWon) {
+  try {
+    const gameData = {
+      id: gs.id + '_r' + gs.round,
+      time: new Date().toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' }),
+      type: '온라인',
+      jugong: gs.jugong,
+      friend: gs.no_friend ? '(노프렌드)' : (gs.friend || '미공개'),
+      c1: players.filter(p => p !== gs.jugong && p !== gs.friend)[0] || '',
+      c2: players.filter(p => p !== gs.jugong && p !== gs.friend)[1] || '',
+      c3: players.filter(p => p !== gs.jugong && p !== gs.friend)[2] || '',
+      gongak: gs.contract,
+      score: Object.values(gs.scores || {}).reduce((a, b) => a + b, 0),
+      noFriend: gs.no_friend,
+      noGiru: gs.no_giru,
+      players: players.map(p => ({ name: p, role: p === gs.jugong ? '주공' : p === gs.friend ? '프렌드' : '시민', score: pointChanges[p] || 0 })),
+      result: jugongWon ? '주공 승리' : '시민 승리',
+      semester: localStorage.getItem('mighty_current_semester') || '26-1',
+    };
+
+    // 구글 시트에 저장
+    await fetch(CONFIG.SCRIPT_URL, {
+      method: 'POST',
+      mode: 'no-cors',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'addGame', data: gameData }),
+    });
+
+    // 로컬 랭킹 업데이트
+    const sem = gameData.semester;
+    const savedLogs = localStorage.getItem('mighty_logs');
+    const logData = savedLogs ? JSON.parse(savedLogs) : {};
+    if (!logData[sem]) logData[sem] = [];
+    logData[sem].unshift(gameData);
+    localStorage.setItem('mighty_logs', JSON.stringify(logData));
+
+    // 랭킹 재계산
+    const scores = {};
+    for (const [s, logs] of Object.entries(logData)) {
+      for (const game of logs) {
+        for (const p of game.players) {
+          if (!p.name || p.name === '(노프렌드)') continue;
+          if (!scores[p.name]) scores[p.name] = 0;
+          scores[p.name] += p.score;
+        }
+      }
+    }
+    const ranking = Object.entries(scores)
+      .map(([name, score]) => ({ name, score }))
+      .sort((a, b) => b.score - a.score || a.name.localeCompare(b.name));
+    const rankingData = {};
+    rankingData[sem] = ranking;
+    localStorage.setItem('mighty_ranking', JSON.stringify(rankingData));
+
+    console.log('라운드 결과 저장 완료!');
+  } catch (e) {
+    console.warn('라운드 저장 실패:', e);
+  }
 }
 
 async function nextRound(totalScores) {
