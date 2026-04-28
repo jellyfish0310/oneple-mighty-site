@@ -7,10 +7,12 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link href="https://fonts.googleapis.com/css2?family=Black+Han+Sans&family=Noto+Sans+KR:wght@400;500;700&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="style.css" />
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.39.7/dist/umd/supabase.min.js"></script>
   <script>
-  // Supabase를 별도 네임스페이스로 로드
+    // SDK 로드 직후 즉시 별도 변수에 저장 (이후 충돌 방지)
+    window._supabaseSDK = window.supabase;
+    console.log('SDK saved:', typeof window._supabaseSDK, !!window._supabaseSDK.createClient);
   </script>
-  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.39.7/dist/umd/supabase.min.js" onload="window._supabaseSDK = window.supabase; console.log('SDK loaded:', typeof window._supabaseSDK);"></script>
 </head>
 <body>
   <!-- MAIN PAGE -->
