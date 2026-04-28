@@ -532,8 +532,12 @@ function renderBiddingPhase(gs) {
   const currentMaxDisplay = currentMaxVal === 12 ? '-' : 
     currentMaxAmount + (currentMaxIsNogiru ? ' 노기루' : '');
 
-  // 가능한 최소 숫자: 현재 최고가 노기루면 같은 숫자도 가능(기루로), 아니면 +1
-  const minAmount = currentMaxIsNogiru ? currentMaxAmount : currentMaxAmount + 1;
+  // 최솟값: 노기루보다 높게 하려면 숫자+1 필요. 기루로 현재 노기루와 같은 숫자 가능.
+  // 현재 최고가 노기루X면, 기루로 X도 가능, 노기루로 X+1 가능
+  // 현재 최고가 기루X면, X+1부터 가능 (노기루X는 기루X보다 높으므로 X도 가능)
+  // 즉 minAmount = 현재 최고가 노기루이면 currentMaxAmount(기루로 같은수 가능), 아니면 currentMaxAmount(노기루로 같은수 가능)
+  // 실제로는 항상 currentMaxAmount부터 선택 가능하게 하고, 검증은 placeBid에서
+  const minAmount = currentMaxAmount;
 
   document.getElementById('game-area').innerHTML = `
     <div class="game-phase-container">
@@ -585,7 +589,13 @@ async function placeBid() {
   const currentMaxVal = getCurrentMaxBid(gs.bids);
   const bidVal = amount + (suit === '노기루' ? 0.5 : 0);
   if (bidVal <= currentMaxVal) {
-    alert('현재 최고 비딩보다 높아야 해요!');
+    const maxAmt = Math.floor(currentMaxVal);
+    const maxIsNogiru = currentMaxVal % 1 !== 0;
+    if (maxIsNogiru) {
+      alert('현재 최고: ' + maxAmt + ' 노기루\n같은 숫자는 기루 문양으로만 가능하고, 노기루는 ' + (maxAmt+1) + '부터 가능해요!');
+    } else {
+      alert('현재 최고: ' + maxAmt + '\n같은 숫자 노기루 또는 숫자+1부터 가능해요!');
+    }
     return;
   }
 
@@ -732,11 +742,12 @@ async function confirmPreChange() {
   let finalSuit = gs.contract_suit;
 
   if (newSuit && newSuit !== '') {
-    // 문양 변경: 기존 공약 + 1
-    finalContract = Math.min(20, gs.contract + 1);
+    // 문양 변경: 기존 공약 + 1 (최대 20)
+    const baseNum = parseInt(newContract) || gs.contract;
+    finalContract = Math.min(20, Math.max(baseNum, gs.contract) + 1);
     finalSuit = newSuit;
-  } else if (newContract && parseInt(newContract) > gs.contract) {
-    // 숫자만 변경: 선택한 숫자 + 1
+  } else if (newContract && parseInt(newContract) > 0) {
+    // 숫자만 변경: 선택한 숫자 + 1 (최대 20)
     finalContract = Math.min(20, parseInt(newContract) + 1);
   }
 
@@ -832,13 +843,13 @@ async function confirmFloorCards() {
 
   const newContractVal = newContract && newContract !== '' ? parseInt(newContract) : 0;
   if (newSuit && newSuit !== '') {
-    // 문양 변경: 기존 공약 + 2 (최대 20)
+    // 문양 변경: 현재 공약 + 2 (최대 20)
     const base = newContractVal > gs.contract ? newContractVal : gs.contract;
-    finalContract = Math.min(20, base + 2);
+    finalContract = Math.min(20, gs.contract + 2);
     finalSuit = newSuit;
   } else if (newContractVal > 0) {
-    // 숫자만 변경: 선택값 + 2 (최대 20)
-    finalContract = Math.min(20, newContractVal + 2);
+    // 숫자만 변경: 선택값이지만 최소 현재공약+2 (최대 20)
+    finalContract = Math.min(20, Math.max(newContractVal, gs.contract + 2));
   }
 
   const newHands = { ...gs.hands, [onlineState.myName]: newHand };
@@ -935,12 +946,14 @@ function renderPlayingPhase(gs) {
   const mightyId = getMighty(gs.contract_suit);
   const jokerCallerId = getJokerCaller(gs.contract_suit);
 
-  // 프렌드 공개 여부
+  // 프렌드 정보 표시 (friend_card는 항상 공개)
   let friendReveal = '';
   if (gs.friend) {
     friendReveal = `<span class="friend-badge">🤝 프렌드: ${gs.friend}</span>`;
   } else if (gs.no_friend) {
     friendReveal = `<span class="friend-badge nofriend">노프렌드</span>`;
+  } else if (gs.friend_card) {
+    friendReveal = `<span class="friend-badge" style="background:#fef3c7;color:#92400e;border-color:#f59e0b">🃏 프렌드카드: ${gs.friend_card} (미공개)</span>`;
   }
 
   document.getElementById('game-area').innerHTML = `
@@ -1008,16 +1021,57 @@ async function playCard(cardId) {
   const cardIdx = myHand.findIndex(c => c.id === cardId);
   if (cardIdx === -1) return;
 
-  // 조커콜 상태: 조커 있는 사람은 조커만 낼 수 있음
+  const playingCard = myHand[cardIdx];
+  const mightyId = getMighty(gs.contract_suit);
+  const existingTricks = gs.tricks || [];
+  const currentTrickArr = gs.current_trick || [];
+  const isFirstTrick = existingTricks.length === 0 && currentTrickArr.length === 0;
+  const isJugong = gs.current_turn === gs.jugong;
+
+  // ── 첫 트릭: 기루 금지 (조커 효력 없음, 마이티는 가능) ──
+  if (isFirstTrick) {
+    const isGiru = !gs.no_giru && playingCard.suit === gs.contract_suit && playingCard.id !== mightyId && playingCard.id !== 'JK';
+    if (isGiru) {
+      alert('첫 판에는 기루 패를 낼 수 없어요!');
+      return;
+    }
+    // 조커도 첫 판 효력 없지만 낼 수는 있음 (일반카드 취급)
+  }
+
+  // ── 조커콜: 조커 있는 사람은 조커만 낼 수 있음 ──
   const hasJoker = myHand.some(c => c.id === 'JK');
   if ((gs.bids && gs.bids._joker_called) && hasJoker && cardId !== 'JK') {
     alert('조커콜! 조커를 내야 합니다!');
     return;
   }
 
+  // ── 선패 문양 강제 규칙 ──
+  if (currentTrickArr.length > 0) {
+    const leadCard = currentTrickArr[0].card;
+    // 조커가 선이면 선언한 문양이 기준 (없으면 기루)
+    const leadSuit = leadCard.id === 'JK' ? gs.contract_suit : leadCard.suit;
+    
+    // 예외: 마이티와 조커만 자유롭게 낼 수 있음
+    const isSpecialCard = playingCard.id === 'JK' || playingCard.id === mightyId;
+    
+    if (!isSpecialCard) {
+      // 손패에 선패 문양이 있는지 확인 (마이티/조커 제외하고)
+      const hasSuit = myHand.some(c => {
+        if (c.id === 'JK' || c.id === mightyId) return false;
+        return c.suit === leadSuit;
+      });
+      
+      if (hasSuit && playingCard.suit !== leadSuit) {
+        alert('선패 문양(' + leadSuit + ')이 있으면 반드시 내야 해요!\n(마이티/조커만 예외)');
+        return;
+      }
+    }
+  }
+
+  // ── 카드 내기 ──
   const card = myHand.splice(cardIdx, 1)[0];
   const newHands = { ...gs.hands, [onlineState.myName]: myHand };
-  const currentTrick = [...(gs.current_trick || []), { player: onlineState.myName, card }];
+  const newTrickArr = [...currentTrickArr, { player: onlineState.myName, card }];
 
   // 프렌드 공개 체크
   let friend = gs.friend;
@@ -1028,45 +1082,48 @@ async function playCard(cardId) {
   const room = await sbClient.from('rooms').select('*').eq('id', onlineState.currentRoom).single();
   const players = room.data.players;
 
-  if (currentTrick.length === 5) {
-    // 트릭 완료
-    const mightyId = getMighty(gs.contract_suit);
+  if (newTrickArr.length === 5) {
+    // ── 트릭 완료 ──
     const jokerCallerId = getJokerCaller(gs.contract_suit);
-    const trickNum = tricks.length - 1; // 방금 완성된 트릭 번호
-    const winner = getWinner(currentTrick, gs.contract_suit, mightyId, jokerCallerId, gs.no_giru, trickNum, 10);
+    const trickNum = existingTricks.length; // 0부터 시작하는 현재 트릭 번호
+    const winner = getWinner(newTrickArr, gs.contract_suit, mightyId, jokerCallerId, gs.no_giru, trickNum, 10);
 
-    const tricks = [...(gs.tricks || []), { cards: currentTrick, winner }];
+    // tricks 배열에 추가
+    const newTricks = [...existingTricks, { cards: newTrickArr, winner }];
+    
+    // 점수 계산 (10,J,Q,K,A = 1점씩)
     const scores = { ...(gs.scores || {}) };
-    currentTrick.forEach(t => {
-      if (RANK_SCORES[t.card.rank]) scores[winner] = (scores[winner] || 0) + 1;
+    newTrickArr.forEach(t => {
+      if (RANK_SCORES[t.card.rank]) {
+        scores[winner] = (scores[winner] || 0) + 1;
+      }
     });
 
-    // 바닥패 점수도 winner에게
-    (gs.floor_cards || []).forEach(c => {
-      if (RANK_SCORES[c.rank]) scores[winner] = (scores[winner] || 0) + 1;
-    });
-
-    // 모든 트릭 완료?
-    if (tricks.length >= 10) {
+    // 마지막 트릭(10번째)에 바닥패 점수 추가
+    if (newTricks.length >= 10) {
+      (gs.floor_cards || []).forEach(c => {
+        if (RANK_SCORES[c.rank]) {
+          scores[winner] = (scores[winner] || 0) + 1;
+        }
+      });
       await sbClient.from('game_states').update({
-        hands: newHands, current_trick: [], tricks, scores, friend,
-        phase: 'round_end',
-        current_turn: null,
+        hands: newHands, current_trick: [], tricks: newTricks, scores, friend,
+        phase: 'round_end', current_turn: null,
         updated_at: new Date().toISOString(),
       }).eq('id', gs.id);
     } else {
       await sbClient.from('game_states').update({
-        hands: newHands, current_trick: [], tricks, scores, friend,
+        hands: newHands, current_trick: [], tricks: newTricks, scores, friend,
         current_turn: winner,
         updated_at: new Date().toISOString(),
       }).eq('id', gs.id);
     }
   } else {
-    // 다음 플레이어
+    // ── 다음 플레이어 (현재 트릭 순서 유지) ──
     const idx = players.indexOf(onlineState.myName);
     const nextPlayer = players[(idx + 1) % players.length];
     await sbClient.from('game_states').update({
-      hands: newHands, current_trick: currentTrick, friend,
+      hands: newHands, current_trick: newTrickArr, friend,
       current_turn: nextPlayer,
       updated_at: new Date().toISOString(),
     }).eq('id', gs.id);
