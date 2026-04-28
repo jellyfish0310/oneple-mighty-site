@@ -119,8 +119,9 @@ async function loadOnlinePage() {
   // Supabase 초기화 - 최대 5초 대기
   if (!sbClient) {
     for (let i = 0; i < 15; i++) {
-      const sdk = window.supabase || window.Supabase;
-      if (sdk && sdk.createClient) { initSupabase(); break; }
+      if (window._supabaseSDK && window._supabaseSDK.createClient) {
+        initSupabase(); break;
+      }
       await new Promise(r => setTimeout(r, 300));
     }
   }
