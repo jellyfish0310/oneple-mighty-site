@@ -89,9 +89,12 @@ function getJokerCaller(giru) {
   return '클3';
 }
 
-function cardPower(card, giru, leadSuit, mightyId, jokerCallerId, noGiru) {
-  // 조커
-  if (card.id === 'JK') return 1000;
+function cardPower(card, giru, leadSuit, mightyId, jokerCallerId, noGiru, trickNum, totalTricks) {
+  // 조커: 첫 판(trickNum===0)과 마지막 판(trickNum===totalTricks-1)에는 효력 없음
+  if (card.id === 'JK') {
+    if (trickNum === 0 || trickNum === totalTricks - 1) return RANKS.indexOf('A') + 1; // 일반 카드 취급
+    return 1000;
+  }
   // 마이티
   if (card.id === mightyId) return 999;
   // 노기루면 숫자만
@@ -109,12 +112,12 @@ function cardPower(card, giru, leadSuit, mightyId, jokerCallerId, noGiru) {
   return 0;
 }
 
-function getWinner(trick, giru, mightyId, jokerCallerId, noGiru) {
+function getWinner(trick, giru, mightyId, jokerCallerId, noGiru, trickNum, totalTricks) {
   let best = null;
   let bestPower = -1;
   const leadSuit = trick[0].card.suit === 'JK' ? giru : trick[0].card.suit;
   for (const t of trick) {
-    const p = cardPower(t.card, giru, leadSuit, mightyId, jokerCallerId, noGiru);
+    const p = cardPower(t.card, giru, leadSuit, mightyId, jokerCallerId, noGiru, trickNum, totalTricks);
     if (p > bestPower) { bestPower = p; best = t.player; }
   }
   return best;
@@ -418,6 +421,7 @@ function renderGame() {
 
   switch (gs.phase) {
     case 'bidding': renderBiddingPhase(gs); break;
+    case 'floor_cards_pre': renderFloorCardsPrePhase(gs); break;
     case 'floor_cards': renderFloorCardsPhase(gs); break;
     case 'friend_select': renderFriendSelectPhase(gs); break;
     case 'playing': renderPlayingPhase(gs); break;
@@ -501,20 +505,49 @@ async function passDealMiss() {
 }
 
 // ── 비딩 단계 ──────────────────────────────────────────────
+function getBidValue(bid) {
+  // 노기루는 같은 숫자 기루보다 0.5 높게 취급
+  if (!bid || bid.passed) return 0;
+  return bid.amount + (bid.suit === '노기루' ? 0.5 : 0);
+}
+
+function getCurrentMaxBid(bids) {
+  const vals = Object.values(bids || {}).filter(b => !b.passed).map(b => getBidValue(b));
+  return vals.length > 0 ? Math.max(...vals) : 12;
+}
+
 function renderBiddingPhase(gs) {
   const isMyTurn = gs.current_turn === onlineState.myName;
   const isBidStarter = gs.bid_start_player === onlineState.myName;
-  const currentMax = Math.max(12, ...Object.values(gs.bids || {}).map(b => b.amount || 0));
   const myBid = (gs.bids || {})[onlineState.myName];
+  // 내가 이미 한 번 비딩했으면 패스 가능 (시작자도 포함)
+  const hasAlreadyBid = myBid && !myBid.passed;
+  const canPass = !isBidStarter || hasAlreadyBid;
+
+  const currentMaxVal = getCurrentMaxBid(gs.bids);
+  const currentMaxAmount = Math.floor(currentMaxVal);
+  const currentMaxIsNogiru = currentMaxVal % 1 !== 0;
+
+  // 가능한 비딩 옵션 계산
+  const options = [];
+  for (let n = 13; n <= 20; n++) {
+    ['스','다','클','하','노기루'].forEach(suit => {
+      const val = n + (suit === '노기루' ? 0.5 : 0);
+      if (val > currentMaxVal) options.push({n, suit});
+    });
+  }
+
+  const currentMaxDisplay = currentMaxVal === 12 ? '-' : 
+    currentMaxAmount + (currentMaxIsNogiru ? ' 노기루' : '');
 
   document.getElementById('game-area').innerHTML = `
     <div class="game-phase-container">
       <div class="phase-header">
         <span class="phase-badge">비딩</span>
-        <span class="phase-info">현재 최고: ${currentMax === 12 ? '-' : currentMax}</span>
+        <span class="phase-info">현재 최고: ${currentMaxDisplay}</span>
       </div>
       <div class="bids-display">
-        ${Object.entries(gs.bids || {}).map(([p, b]) =>
+        ${Object.entries(gs.bids || {}).filter(([k]) => !k.startsWith('_')).map(([p, b]) =>
           `<span class="bid-item">${p}: ${b.passed ? '패스' : b.amount + (b.suit ? ' ' + b.suit : '')}</span>`
         ).join('')}
       </div>
@@ -524,23 +557,15 @@ function renderBiddingPhase(gs) {
       </div>
       ${isMyTurn ? `
         <div class="action-area">
-          <p class="action-hint">비딩하세요 (최소 ${currentMax + 1})</p>
+          <p class="action-hint">비딩하세요</p>
           <div class="bid-controls">
-            <select id="bid-amount">
-              ${Array.from({length: 20 - currentMax}, (_, i) => currentMax + 1 + i)
-                .map(n => `<option value="${n}">${n}</option>`).join('')}
-            </select>
-            <select id="bid-suit">
-              <option value="스">♠ 스페이드</option>
-              <option value="다">◆ 다이아</option>
-              <option value="클">♣ 클럽</option>
-              <option value="하">♥ 하트</option>
-              <option value="노기루">노기루</option>
+            <select id="bid-select">
+              ${options.map(o => `<option value="${o.n}_${o.suit}">${o.n} ${o.suit === '노기루' ? '노기루' : o.suit}</option>`).join('')}
             </select>
           </div>
           <div class="bid-btns">
             <button class="game-btn btn-primary" onclick="placeBid()">비딩</button>
-            ${!isBidStarter ? `<button class="game-btn btn-secondary" onclick="passBid()">패스</button>` : ''}
+            ${canPass ? `<button class="game-btn btn-secondary" onclick="passBid()">패스</button>` : ''}
           </div>
         </div>` : `<p class="waiting-hint">⏳ ${gs.current_turn}이(가) 비딩 중...</p>`}
     </div>`;
@@ -550,8 +575,9 @@ async function placeBid() {
   const gs = onlineState.gameState;
   const room = await sbClient.from('rooms').select('*').eq('id', onlineState.currentRoom).single();
   const players = room.data.players;
-  const amount = parseInt(document.getElementById('bid-amount').value);
-  const suit = document.getElementById('bid-suit').value;
+  const selected = document.getElementById('bid-select').value;
+  const [amountStr, suit] = selected.split('_');
+  const amount = parseInt(amountStr);
 
   const bids = { ...(gs.bids || {}), [onlineState.myName]: { amount, suit } };
 
@@ -564,7 +590,7 @@ async function placeBid() {
       contract: amount,
       contract_suit: suit,
       no_giru: suit === '노기루',
-      phase: 'floor_cards',
+      phase: 'floor_cards_pre',
       current_turn: onlineState.myName,
       updated_at: new Date().toISOString(),
     }).eq('id', gs.id);
@@ -573,17 +599,16 @@ async function placeBid() {
 
   const nextPlayer = getNextBidPlayer(players, gs, bids, onlineState.myName);
   if (nextPlayer === null) {
-    // 비딩 종료
     const winner = Object.entries(bids)
-      .filter(([, b]) => !b.passed)
-      .sort((a, b) => b[1].amount - a[1].amount)[0];
+      .filter(([k, b]) => !b.passed && !k.startsWith('_'))
+      .sort((a, b) => getBidValue(b[1]) - getBidValue(a[1]))[0];
     await sbClient.from('game_states').update({
       bids,
       jugong: winner[0],
       contract: winner[1].amount,
       contract_suit: winner[1].suit,
       no_giru: winner[1].suit === '노기루',
-      phase: 'floor_cards',
+      phase: 'floor_cards_pre',
       current_turn: winner[0],
       updated_at: new Date().toISOString(),
     }).eq('id', gs.id);
@@ -605,10 +630,9 @@ async function passBid() {
   const nextPlayer = getNextBidPlayer(players, gs, bids, onlineState.myName);
   if (nextPlayer === null) {
     const winner = Object.entries(bids)
-      .filter(([, b]) => !b.passed)
-      .sort((a, b) => b[1].amount - a[1].amount)[0];
+      .filter(([k, b]) => !b.passed && !k.startsWith('_'))
+      .sort((a, b) => getBidValue(b[1]) - getBidValue(a[1]))[0];
     if (!winner) {
-      // 전원 패스 - 비딩 재시작
       await sbClient.from('game_states').update({
         bids: {},
         current_turn: gs.bid_start_player,
@@ -622,7 +646,7 @@ async function passBid() {
       contract: winner[1].amount,
       contract_suit: winner[1].suit,
       no_giru: winner[1].suit === '노기루',
-      phase: 'floor_cards',
+      phase: 'floor_cards_pre',
       current_turn: winner[0],
       updated_at: new Date().toISOString(),
     }).eq('id', gs.id);
@@ -646,36 +670,105 @@ function getNextBidPlayer(players, gs, bids, currentPlayer) {
   return null;
 }
 
+
+// ── 바닥패 확인 전 단계 (공약 변경 +1) ──────────────────────
+function renderFloorCardsPrePhase(gs) {
+  const isJugong = gs.jugong === onlineState.myName;
+  document.getElementById('game-area').innerHTML = `
+    <div class="game-phase-container">
+      <div class="phase-header">
+        <span class="phase-badge">바닥패 확인 전</span>
+        <span class="phase-info">주공: ${gs.jugong} | 공약: ${gs.contract} ${gs.contract_suit}</span>
+      </div>
+      ${isJugong ? `
+        <p class="action-hint">바닥패를 확인하기 전에 공약을 변경할 수 있어요. (변경 시 +1)<br>
+          <small>지금 변경하면 공약 최소 ${gs.contract + 1}이 돼요.</small></p>
+        <div class="bid-controls" style="margin-top:0.75rem">
+          <label style="font-size:0.85rem">공약 변경 (선택)</label>
+          <select id="pre-new-contract">
+            <option value="">변경 안 함</option>
+            ${Array.from({length: 20 - gs.contract}, (_, i) => gs.contract + 1 + i)
+              .map(n => `<option value="${n}">${n}</option>`).join('')}
+          </select>
+          <select id="pre-new-suit">
+            <option value="">변경 안 함</option>
+            <option value="스">♠ 스페이드</option>
+            <option value="다">◆ 다이아</option>
+            <option value="클">♣ 클럽</option>
+            <option value="하">♥ 하트</option>
+            <option value="노기루">노기루</option>
+          </select>
+        </div>
+        <div class="bid-btns" style="margin-top:0.75rem">
+          <button class="game-btn btn-primary" onclick="confirmPreChange()">바닥패 확인하기</button>
+        </div>
+        <div class="my-hand-area" style="margin-top:1rem">
+          <p class="hand-label">내 패</p>
+          <div class="card-hand">${(gs.hands[onlineState.myName] || []).map(c => renderCardHTML(c)).join('')}</div>
+        </div>
+      ` : `<p class="waiting-hint">⏳ 주공(${gs.jugong})이 공약을 검토 중...</p>
+        <div class="my-hand-area"><p class="hand-label">내 패</p>
+          <div class="card-hand">${(gs.hands[onlineState.myName] || []).map(c => renderCardHTML(c)).join('')}</div>
+        </div>`}
+    </div>`;
+}
+
+async function confirmPreChange() {
+  const gs = onlineState.gameState;
+  const newContract = document.getElementById('pre-new-contract').value;
+  const newSuit = document.getElementById('pre-new-suit').value;
+
+  let finalContract = gs.contract;
+  let finalSuit = gs.contract_suit;
+
+  if (newSuit && newSuit !== '') {
+    // 문양 변경: 기존 공약 + 1
+    finalContract = Math.min(20, gs.contract + 1);
+    finalSuit = newSuit;
+  } else if (newContract && parseInt(newContract) > gs.contract) {
+    // 숫자만 변경: 선택한 숫자 + 1
+    finalContract = Math.min(20, parseInt(newContract) + 1);
+  }
+
+  await sbClient.from('game_states').update({
+    contract: finalContract,
+    contract_suit: finalSuit,
+    no_giru: finalSuit === '노기루',
+    phase: 'floor_cards',
+    updated_at: new Date().toISOString(),
+  }).eq('id', gs.id);
+}
+
 // ── 바닥패 단계 ────────────────────────────────────────────
 function renderFloorCardsPhase(gs) {
   const isJugong = gs.jugong === onlineState.myName;
   const myHand = gs.hands[onlineState.myName] || [];
   const floorCards = gs.floor_cards || [];
+  // 주공은 손패 + 바닥패 모두 선택 가능
   const fullHand = isJugong ? [...myHand, ...floorCards] : myHand;
 
   document.getElementById('game-area').innerHTML = `
     <div class="game-phase-container">
       <div class="phase-header">
-        <span class="phase-badge">바닥패</span>
+        <span class="phase-badge">바닥패 확인</span>
         <span class="phase-info">주공: ${gs.jugong} | 공약: ${gs.contract} ${gs.contract_suit}</span>
       </div>
       ${isJugong ? `
-        <p class="action-hint">바닥패 3장을 확인하고 3장을 버려주세요.<br>
-          <small>확인 전 공약 변경: +1 / 확인 후 변경: +2</small></p>
-        <div class="floor-cards-area">
-          <p class="hand-label">바닥패</p>
-          <div class="card-hand">${floorCards.map(c => renderCardHTML(c, true)).join('')}</div>
-        </div>
+        <p class="action-hint">손패+바닥패 포함 13장 중 3장을 버려주세요.<br>
+          <small>공약 변경 시 +2 (최대 20)</small></p>
         <div class="my-hand-area">
-          <p class="hand-label">내 패 (13장 중 3장 선택해서 버리기)</p>
+          <p class="hand-label">🃏 손패 + 바닥패 (3장 선택해서 버리기)</p>
           <div class="card-hand" id="jugong-full-hand">
             ${fullHand.map(c => renderCardHTML(c, true, 'toggleDiscard', true)).join('')}
           </div>
         </div>
         <div class="bid-controls" style="margin-top:0.75rem">
-          <label style="font-size:0.85rem">공약 변경 (선택)</label>
-          <select id="new-contract">${Array.from({length:8},(_,i)=>gs.contract+i)
-            .map(n=>`<option value="${n}">${n}</option>`).join('')}</select>
+          <label style="font-size:0.85rem">공약 변경 (선택, +2 패널티)</label>
+          <select id="new-contract">
+            <option value="">변경 안 함</option>
+            ${Array.from({length: 20 - gs.contract}, (_, i) => gs.contract + 1 + i)
+              .map(n => `<option value="${n}">${n}</option>`).join('')}
+          </select>
           <select id="new-suit">
             <option value="">변경 안 함</option>
             <option value="스">♠ 스페이드</option>
@@ -686,7 +779,7 @@ function renderFloorCardsPhase(gs) {
           </select>
         </div>
         <button class="game-btn btn-primary" style="margin-top:0.75rem" onclick="confirmFloorCards()">확인 완료</button>
-      ` : `<p class="waiting-hint">⏳ 주공(${gs.jugong})이 바닥패를 확인 중...</p>
+      ` : `<p class="waiting-hint">⏳ 주공(${gs.jugong})이 바닥패를 정리 중...</p>
         <div class="my-hand-area">
           <p class="hand-label">내 패</p>
           <div class="card-hand">${myHand.map(c => renderCardHTML(c)).join('')}</div>
@@ -726,16 +819,15 @@ async function confirmFloorCards() {
 
   let finalContract = gs.contract;
   let finalSuit = gs.contract_suit;
-  let contractChanged = false;
 
-  if (newSuit && newSuit !== gs.contract_suit) {
-    // 확인 후 변경 → +2
-    finalContract = Math.max(newContract, gs.contract) + 2;
+  const newContractNum = newContract ? parseInt(newContract) : 0;
+  if (newSuit && newSuit !== '') {
+    // 문양 변경: +2
+    finalContract = Math.min(20, Math.max(newContractNum || gs.contract, gs.contract) + 2);
     finalSuit = newSuit;
-    contractChanged = true;
-  } else if (newContract > gs.contract) {
-    finalContract = newContract + 2;
-    contractChanged = true;
+  } else if (newContractNum > gs.contract) {
+    // 숫자만 변경: +2
+    finalContract = Math.min(20, newContractNum + 2);
   }
 
   const newHands = { ...gs.hands, [onlineState.myName]: newHand };
@@ -874,10 +966,27 @@ function renderPlayingPhase(gs) {
           ${myHand.map(c => renderCardHTML(c, isMyTurn, 'playCard', true)).join('')}
         </div>
       </div>
+      ${isMyTurn && currentTrick.length === 0 && !(gs.bids && gs.bids._joker_called) ? `
+        <div class="action-area" style="margin-top:0.5rem">
+          <button class="game-btn btn-secondary" onclick="declareJokerCall()" style="font-size:0.82rem;padding:0.4rem 0.85rem">
+            조커콜 선언
+          </button>
+          <small style="color:var(--text-muted);margin-left:0.5rem">조커 보유자는 조커를 내야 해요</small>
+        </div>` : ''}
+      ${(gs.bids && gs.bids._joker_called) ? `<div class="phase-info" style="color:var(--orange);font-weight:700">⚠️ 조커콜! 조커 보유자는 조커를 내야 합니다</div>` : ''}
       <div class="tricks-summary">
         완료된 트릭: ${tricks.length}
       </div>
     </div>`;
+}
+
+
+async function declareJokerCall() {
+  const gs = onlineState.gameState;
+  await sbClient.from('game_states').update({
+    bids: { ...(onlineState.gameState.bids || {}), _joker_called: true },
+    updated_at: new Date().toISOString(),
+  }).eq('id', gs.id);
 }
 
 async function playCard(cardId) {
@@ -887,6 +996,13 @@ async function playCard(cardId) {
   const myHand = [...(gs.hands[onlineState.myName] || [])];
   const cardIdx = myHand.findIndex(c => c.id === cardId);
   if (cardIdx === -1) return;
+
+  // 조커콜 상태: 조커 있는 사람은 조커만 낼 수 있음
+  const hasJoker = myHand.some(c => c.id === 'JK');
+  if ((gs.bids && gs.bids._joker_called) && hasJoker && cardId !== 'JK') {
+    alert('조커콜! 조커를 내야 합니다!');
+    return;
+  }
 
   const card = myHand.splice(cardIdx, 1)[0];
   const newHands = { ...gs.hands, [onlineState.myName]: myHand };
@@ -905,7 +1021,8 @@ async function playCard(cardId) {
     // 트릭 완료
     const mightyId = getMighty(gs.contract_suit);
     const jokerCallerId = getJokerCaller(gs.contract_suit);
-    const winner = getWinner(currentTrick, gs.contract_suit, mightyId, jokerCallerId, gs.no_giru);
+    const trickNum = tricks.length - 1; // 방금 완성된 트릭 번호
+    const winner = getWinner(currentTrick, gs.contract_suit, mightyId, jokerCallerId, gs.no_giru, trickNum, 10);
 
     const tricks = [...(gs.tricks || []), { cards: currentTrick, winner }];
     const scores = { ...(gs.scores || {}) };
