@@ -112,10 +112,11 @@ function cardPower(card, giru, leadSuit, mightyId, jokerCallerId, noGiru, trickN
   return 0;
 }
 
-function getWinner(trick, giru, mightyId, jokerCallerId, noGiru, trickNum, totalTricks) {
+function getWinner(trick, giru, mightyId, jokerCallerId, noGiru, trickNum, totalTricks, jokerLeadSuitOverride) {
   let best = null;
   let bestPower = -1;
-  const leadSuit = trick[0].card.suit === 'JK' ? giru : trick[0].card.suit;
+  // 조커가 선이면 선언 문양 사용
+  const leadSuit = trick[0].card.id === 'JK' ? (jokerLeadSuitOverride || giru) : trick[0].card.suit;
   for (const t of trick) {
     const p = cardPower(t.card, giru, leadSuit, mightyId, jokerCallerId, noGiru, trickNum, totalTricks);
     if (p > bestPower) { bestPower = p; best = t.player; }
@@ -512,8 +513,8 @@ function getBidValue(bid) {
 }
 
 function getCurrentMaxBid(bids) {
-  const vals = Object.values(bids || {}).filter(b => !b.passed).map(b => getBidValue(b));
-  return vals.length > 0 ? Math.max(...vals) : 12;
+  const vals = Object.values(bids || {}).filter(b => !b.passed && b.amount).map(b => getBidValue(b));
+  return vals.length > 0 ? Math.max(...vals) : 12; // 12는 내부 기준값, 실제 최소는 13
 }
 
 function renderBiddingPhase(gs) {
@@ -537,7 +538,7 @@ function renderBiddingPhase(gs) {
   // 현재 최고가 기루X면, X+1부터 가능 (노기루X는 기루X보다 높으므로 X도 가능)
   // 즉 minAmount = 현재 최고가 노기루이면 currentMaxAmount(기루로 같은수 가능), 아니면 currentMaxAmount(노기루로 같은수 가능)
   // 실제로는 항상 currentMaxAmount부터 선택 가능하게 하고, 검증은 placeBid에서
-  const minAmount = currentMaxAmount;
+  const minAmount = Math.max(13, currentMaxAmount); // 최소 비딩은 항상 13
 
   document.getElementById('game-area').innerHTML = `
     <div class="game-phase-container">
@@ -985,18 +986,30 @@ function renderPlayingPhase(gs) {
         </div>
       </div>
       <div class="my-hand-area">
-        <p class="hand-label">내 패 ${isMyTurn ? '(카드를 선택하세요)' : `(${gs.current_turn} 차례)`}</p>
+        <p class="hand-label">내 패 ${isMyTurn ? '(카드를 선택하세요)' : '(' + gs.current_turn + ' 차례)'}</p>
+        ${isMyTurn && currentTrick.length === 0 ? `
+          <div style="margin-bottom:0.5rem;font-size:0.82rem;color:var(--text-muted)">
+            조커를 선으로 내면 문양을 선언할 수 있어요:
+            <select id="joker-lead-suit" style="border:1px solid var(--border);border-radius:6px;padding:2px 6px;font-size:0.82rem">
+              <option value="스">♠ 스페이드</option>
+              <option value="다">◆ 다이아</option>
+              <option value="클">♣ 클럽</option>
+              <option value="하">♥ 하트</option>
+            </select>
+          </div>` : ''}
         <div class="card-hand">
           ${myHand.map(c => renderCardHTML(c, isMyTurn, 'playCard', true)).join('')}
         </div>
       </div>
-      ${isMyTurn && currentTrick.length === 0 && !(gs.bids && gs.bids._joker_called) ? `
-        <div class="action-area" style="margin-top:0.5rem">
-          <button class="game-btn btn-secondary" onclick="declareJokerCall()" style="font-size:0.82rem;padding:0.4rem 0.85rem">
-            조커콜 선언
-          </button>
-          <small style="color:var(--text-muted);margin-left:0.5rem">조커 보유자는 조커를 내야 해요</small>
-        </div>` : ''}
+      ${(()=> {
+        const jokerCallCard = getJokerCaller(gs.contract_suit);
+        const hasJokerCallCard = myHand.some(c => c.id === jokerCallCard);
+        const canDeclare = isMyTurn && currentTrick.length === 0 && hasJokerCallCard && !(gs.bids && gs.bids._joker_called);
+        if (!canDeclare) return '';
+        return '<div class="action-area" style="margin-top:0.5rem">' +
+          '<small style="color:var(--text-muted)">선으로 ' + jokerCallCard + '를 내면서 조커콜을 선언할 수 있어요</small>' +
+          '</div>';
+      })()}
       ${(gs.bids && gs.bids._joker_called) ? `<div class="phase-info" style="color:var(--orange);font-weight:700">⚠️ 조커콜! 조커 보유자는 조커를 내야 합니다</div>` : ''}
       <div class="tricks-summary">
         완료된 트릭: ${tricks.length}
@@ -1049,7 +1062,10 @@ async function playCard(cardId) {
   if (currentTrickArr.length > 0) {
     const leadCard = currentTrickArr[0].card;
     // 조커가 선이면 선언한 문양이 기준 (없으면 기루)
-    const leadSuit = leadCard.id === 'JK' ? gs.contract_suit : leadCard.suit;
+    // 조커가 선이면 선언한 문양 사용 (없으면 기루)
+    const leadSuit = leadCard.id === 'JK' 
+      ? ((gs.bids && gs.bids._joker_lead_suit) || gs.contract_suit)
+      : leadCard.suit;
     
     // 예외: 마이티와 조커만 자유롭게 낼 수 있음
     const isSpecialCard = playingCard.id === 'JK' || playingCard.id === mightyId;
@@ -1066,6 +1082,26 @@ async function playCard(cardId) {
         return;
       }
     }
+  }
+
+  // ── 조커를 선으로 낼 때 문양 선택 저장 ──
+  let jokerLeadSuit = null;
+  if (cardId === 'JK' && currentTrickArr.length === 0 && existingTricks.length > 0 && existingTricks.length < 9) {
+    const suitEl = document.getElementById('joker-lead-suit');
+    jokerLeadSuit = suitEl ? suitEl.value : gs.contract_suit;
+  }
+
+  // ── 조커콜 자동 처리: 조커콜 카드를 선으로 내면 조커콜 선언 ──
+  const jokerCallCard = getJokerCaller(gs.contract_suit);
+  let newBids = { ...(gs.bids || {}) };
+  if (currentTrickArr.length === 0 && cardId === jokerCallCard && !newBids._joker_called) {
+    newBids._joker_called = true;
+  }
+  if (jokerLeadSuit) {
+    newBids._joker_lead_suit = jokerLeadSuit;
+  } else if (currentTrickArr.length > 0) {
+    // 트릭 진행 중이면 조커 선 문양 초기화
+    delete newBids._joker_lead_suit;
   }
 
   // ── 카드 내기 ──
@@ -1086,7 +1122,8 @@ async function playCard(cardId) {
     // ── 트릭 완료 ──
     const jokerCallerId = getJokerCaller(gs.contract_suit);
     const trickNum = existingTricks.length; // 0부터 시작하는 현재 트릭 번호
-    const winner = getWinner(newTrickArr, gs.contract_suit, mightyId, jokerCallerId, gs.no_giru, trickNum, 10);
+    const jokerLeadSuit = newBids._joker_lead_suit || null;
+    const winner = getWinner(newTrickArr, gs.contract_suit, mightyId, jokerCallerId, gs.no_giru, trickNum, 10, jokerLeadSuit);
 
     // tricks 배열에 추가
     const newTricks = [...existingTricks, { cards: newTrickArr, winner }];
@@ -1107,13 +1144,13 @@ async function playCard(cardId) {
         }
       });
       await sbClient.from('game_states').update({
-        hands: newHands, current_trick: [], tricks: newTricks, scores, friend,
+        hands: newHands, current_trick: [], tricks: newTricks, scores, friend, bids: newBids,
         phase: 'round_end', current_turn: null,
         updated_at: new Date().toISOString(),
       }).eq('id', gs.id);
     } else {
       await sbClient.from('game_states').update({
-        hands: newHands, current_trick: [], tricks: newTricks, scores, friend,
+        hands: newHands, current_trick: [], tricks: newTricks, scores, friend, bids: newBids,
         current_turn: winner,
         updated_at: new Date().toISOString(),
       }).eq('id', gs.id);
@@ -1123,7 +1160,7 @@ async function playCard(cardId) {
     const idx = players.indexOf(onlineState.myName);
     const nextPlayer = players[(idx + 1) % players.length];
     await sbClient.from('game_states').update({
-      hands: newHands, current_trick: newTrickArr, friend,
+      hands: newHands, current_trick: newTrickArr, friend, bids: newBids,
       current_turn: nextPlayer,
       updated_at: new Date().toISOString(),
     }).eq('id', gs.id);
@@ -1245,9 +1282,23 @@ async function nextRound(totalScores) {
     return;
   }
 
-  // 다음 라운드 비딩 시작자 결정
-  const jugongWon = true; // 이미 계산됨
-  let nextBidStarter = gs.bid_start_player;
+  // 다음 라운드 비딩 시작자: 주공 이기면 주공, 주공 지면 프렌드(노프렌드면 주공)
+  const prevScores = gs.scores || {};
+  const prevJugong = gs.jugong;
+  const prevFriend = gs.friend;
+  const prevNoFriend = gs.no_friend;
+  const prevContract = gs.contract;
+  const jugongTeamScore = prevNoFriend 
+    ? (prevScores[prevJugong] || 0)
+    : (prevScores[prevJugong] || 0) + (prevScores[prevFriend] || 0);
+  const jugongWon = jugongTeamScore >= prevContract;
+  
+  let nextBidStarter;
+  if (jugongWon) {
+    nextBidStarter = prevJugong; // 주공 이기면 주공이 다음 시작
+  } else {
+    nextBidStarter = prevNoFriend ? prevJugong : (prevFriend || prevJugong); // 지면 프렌드가 시작
+  }
 
   const { hands, floorCards } = dealCards(players);
   const gsId = onlineState.currentRoom + '_' + nextRound;
