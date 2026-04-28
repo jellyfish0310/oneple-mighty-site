@@ -581,6 +581,7 @@ body {
 }
 .play-card.clickable:hover { transform: translateY(-6px); box-shadow: 0 6px 16px rgba(0,0,0,0.15); }
 .play-card.selected-discard { border-color: var(--red); background: #fff0f0; transform: translateY(-6px); }
+.play-card.card-selected { border-color: var(--navy); background: #e8eaff; transform: translateY(-8px); box-shadow: 0 8px 20px rgba(26,31,94,0.25); }
 .card-rank { font-size: 0.9rem; font-weight: 800; line-height: 1; }
 .card-suit { font-size: 0.85rem; line-height: 1; }
 

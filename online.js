@@ -178,6 +178,28 @@ async function loadRoomList() {
   const content = document.getElementById('online-content');
   content.innerHTML = `<div class="loading-msg">방 목록 불러오는 중...</div>`;
 
+  // 진행 중인 방에 내가 있는지 확인 (튕김 복구)
+  const { data: playingRooms } = await sbClient
+    .from('rooms')
+    .select('*')
+    .eq('status', 'playing');
+  
+  if (playingRooms) {
+    for (const room of playingRooms) {
+      if ((room.players || []).includes(onlineState.myName)) {
+        // 진행 중인 방 발견 - 재접속
+        content.innerHTML = `
+          <div class="card" style="margin-top:1rem;text-align:center">
+            <p style="font-weight:700;margin-bottom:0.75rem">🔄 진행 중인 게임이 있어요!</p>
+            <p style="font-size:0.88rem;color:var(--text-muted);margin-bottom:1rem">${room.name} (방장: ${room.host})</p>
+            <button class="game-btn btn-primary" onclick="rejoinRoom('${room.id}')">게임으로 돌아가기</button>
+            <button class="game-btn btn-secondary" style="margin-top:0.5rem" onclick="forceLeaveAndLoad('${room.id}')">나가기</button>
+          </div>`;
+        return;
+      }
+    }
+  }
+
   const { data: rooms, error } = await sbClient
     .from('rooms')
     .select('*')
@@ -199,6 +221,16 @@ async function loadRoomList() {
     .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'rooms' }, () => loadRoomList())
     .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'rooms' }, () => loadRoomList())
     .subscribe();
+}
+
+async function rejoinRoom(roomId) {
+  onlineState.currentRoom = roomId;
+  await loadGameState(roomId);
+  showPage('page-online-game');
+}
+
+async function forceLeaveAndLoad(roomId) {
+  await leaveRoom(roomId);
 }
 
 function renderRoomList(rooms) {
@@ -882,20 +914,20 @@ function renderFriendSelectPhase(gs) {
       </div>
       ${isJugong ? `
         <p class="action-hint">프렌드 카드를 선택하거나 노프렌드를 선언하세요</p>
-        <div class="friend-select-area">
-          <select id="friend-suit">
-            <option value="스">♠ 스페이드</option>
-            <option value="다">◆ 다이아</option>
-            <option value="클">♣ 클럽</option>
-            <option value="하">♥ 하트</option>
-          </select>
-          <select id="friend-rank">
-            ${RANKS.map(r => `<option value="${r}">${r}</option>`).join('')}
-          </select>
-        </div>
-        <div class="bid-btns">
-          <button class="game-btn btn-primary" onclick="selectFriend()">프렌드 선언</button>
-          <button class="game-btn btn-warning" onclick="declareNoFriend()">노프렌드</button>
+        <div style="display:flex;flex-direction:column;gap:0.75rem;margin-top:0.5rem">
+          <div style="display:flex;gap:0.5rem;flex-wrap:wrap">
+            <select id="friend-suit" style="flex:1;min-width:120px;border:1.5px solid var(--border);border-radius:10px;padding:0.6rem 0.75rem;font-size:0.95rem">
+              <option value="스">♠ 스페이드</option>
+              <option value="다">◆ 다이아</option>
+              <option value="클">♣ 클럽</option>
+              <option value="하">♥ 하트</option>
+            </select>
+            <select id="friend-rank" style="flex:1;min-width:100px;border:1.5px solid var(--border);border-radius:10px;padding:0.6rem 0.75rem;font-size:0.95rem">
+              ${RANKS.map(r => `<option value="${r}">${r}</option>`).join('')}
+            </select>
+          </div>
+          <button class="game-btn btn-primary" onclick="selectFriend()" style="width:100%">프렌드 선언</button>
+          <button class="game-btn btn-warning" onclick="declareNoFriend()" style="width:100%">노프렌드 선언</button>
         </div>` : `<p class="waiting-hint">⏳ 주공(${gs.jugong})이 프렌드를 선택 중...</p>`}
       <div class="my-hand-area">
         <p class="hand-label">내 패</p>
@@ -997,9 +1029,17 @@ function renderPlayingPhase(gs) {
               <option value="하">♥ 하트</option>
             </select>
           </div>` : ''}
-        <div class="card-hand">
-          ${myHand.map(c => renderCardHTML(c, isMyTurn, 'playCard', true)).join('')}
+        <div class="card-hand" id="my-hand-cards">
+          ${myHand.map(c => renderCardHTML(c, isMyTurn, 'selectCard', true)).join('')}
         </div>
+        ${isMyTurn ? `
+          <div style="margin-top:0.75rem;display:flex;gap:0.5rem;align-items:center">
+            <button class="game-btn btn-primary" id="confirm-card-btn" onclick="confirmCard()" disabled
+              style="opacity:0.4;transition:opacity 0.15s">
+              ✅ 카드 내기
+            </button>
+            <span id="selected-card-info" style="font-size:0.85rem;color:var(--text-muted)">카드를 선택하세요</span>
+          </div>` : ''}
       </div>
       ${(()=> {
         const jokerCallCard = getJokerCaller(gs.contract_suit);
@@ -1017,6 +1057,30 @@ function renderPlayingPhase(gs) {
     </div>`;
 }
 
+
+// 선택된 카드 ID
+let _selectedCardId = null;
+
+function selectCard(cardId) {
+  _selectedCardId = cardId;
+  // 모든 카드 선택 해제
+  document.querySelectorAll('.play-card').forEach(el => el.classList.remove('card-selected'));
+  // 선택된 카드 하이라이트
+  const el = document.querySelector('[data-card="' + cardId + '"]');
+  if (el) el.classList.add('card-selected');
+  // 확인 버튼 활성화
+  const btn = document.getElementById('confirm-card-btn');
+  const info = document.getElementById('selected-card-info');
+  if (btn) { btn.disabled = false; btn.style.opacity = '1'; }
+  if (info) info.textContent = '선택: ' + cardId;
+}
+
+async function confirmCard() {
+  if (!_selectedCardId) return;
+  const cardId = _selectedCardId;
+  _selectedCardId = null;
+  await playCard(cardId);
+}
 
 async function declareJokerCall() {
   const gs = onlineState.gameState;
