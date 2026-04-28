@@ -189,7 +189,7 @@ async function loadRoomList() {
 
   // 실시간 구독
   if (onlineState.roomSubscription) onlineState.roomSubscription.unsubscribe();
-  onlineState.roomSubscription = supabase
+  onlineState.roomSubscription = sbClient
     .channel('rooms-list')
     .on('postgres_changes', { event: '*', schema: 'public', table: 'rooms' }, () => loadRoomList())
     .subscribe();
@@ -302,17 +302,18 @@ async function showWaitingRoom(roomId) {
   renderWaitingRoom(room);
 
   if (onlineState.subscription) onlineState.subscription.unsubscribe();
-  onlineState.subscription = supabase
+  onlineState.subscription = sbClient
     .channel('room-' + roomId)
-    .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'rooms', filter: `id=eq.${roomId}` },
+    .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'rooms', filter: 'id=eq.' + roomId },
       async (payload) => {
+        onlineState.roomData = payload.new;
         if (payload.new.status === 'playing') {
           await loadGameState(roomId);
         } else {
           renderWaitingRoom(payload.new);
         }
       })
-    .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'game_states', filter: `room_id=eq.${roomId}` },
+    .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'game_states', filter: 'room_id=eq.' + roomId },
       async (payload) => {
         onlineState.gameState = payload.new;
         renderGame();
