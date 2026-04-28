@@ -31,7 +31,7 @@ const onlineState = {
 
 // ── 카드 정의 ──────────────────────────────────────────────
 const SUITS = ['스', '다', '클', '하']; // 스페이드, 다이아, 클럽, 하트
-const SUIT_COLORS = { '스': '#1a1f5e', '다': '#e8491d', '클': '#22c55e', '하': '#ef4444' };
+const SUIT_COLORS = { '스': '#1a1f5e', '다': '#d4a017', '클': '#22c55e', '하': '#ef4444' };
 const SUIT_SYMBOLS = { '스': '♠', '다': '◆', '클': '♣', '하': '♥' };
 const RANKS = ['2','3','4','5','6','7','8','9','10','J','Q','K','A'];
 const RANK_SCORES = { '10':1, 'J':1, 'Q':1, 'K':1, 'A':1 }; // 딜미스 계산용
@@ -385,7 +385,7 @@ async function startGame(roomId) {
     id: gsId,
     room_id: roomId,
     round: 1,
-    phase: 'deal_miss',
+    phase: 'bidding',
     hands,
     floor_cards: floorCards,
     bids: {},
@@ -417,7 +417,6 @@ function renderGame() {
   if (!gs) return;
 
   switch (gs.phase) {
-    case 'deal_miss': renderDealMissPhase(gs); break;
     case 'bidding': renderBiddingPhase(gs); break;
     case 'floor_cards': renderFloorCardsPhase(gs); break;
     case 'friend_select': renderFriendSelectPhase(gs); break;
@@ -459,11 +458,12 @@ async function declareDealMiss() {
   const idx = players.indexOf(onlineState.myName);
   const nextPlayer = players[(idx + 1) % players.length];
 
-  // 새로 딜링
+  // 새로 딜링 - 패스 기록 초기화
   const { hands, floorCards } = dealCards(players);
   await sbClient.from('game_states').update({
     hands,
     floor_cards: floorCards,
+    bids: {},
     deal_miss_pot: (gs.deal_miss_pot || 0) + 10,
     current_turn: nextPlayer,
     updated_at: new Date().toISOString(),
@@ -478,9 +478,13 @@ async function passDealMiss() {
   const nextIdx = (idx + 1) % players.length;
   const nextPlayer = players[nextIdx];
 
-  // 모두 패스하면 비딩 시작
-  const checkedCount = (gs.deal_miss_checked || 0) + 1;
+  // deal_miss_checked를 bids 필드에 임시 저장 (별도 컬럼 없이)
+  const bids = gs.bids || {};
+  const passedDealMiss = { ...(bids._deal_miss_pass || {}), [onlineState.myName]: true };
+  const checkedCount = Object.keys(passedDealMiss).length;
+
   if (checkedCount >= players.length) {
+    // 모두 패스 → 비딩 시작
     await sbClient.from('game_states').update({
       phase: 'bidding',
       current_turn: gs.bid_start_player,
@@ -490,7 +494,7 @@ async function passDealMiss() {
   } else {
     await sbClient.from('game_states').update({
       current_turn: nextPlayer,
-      deal_miss_checked: checkedCount,
+      bids: { ...bids, _deal_miss_pass: passedDealMiss },
       updated_at: new Date().toISOString(),
     }).eq('id', gs.id);
   }
@@ -850,7 +854,7 @@ function renderPlayingPhase(gs) {
           const isFriend = p === gs.friend;
           return `<div class="score-item ${isJugong?'jugong':''} ${isFriend?'friend':''}">
             <span>${p}${isJugong?' 👑':''}${isFriend?' 🤝':''}</span>
-            <span class="score-val">${s}점</span>
+            <span class="score-val">${s}pt</span>
           </div>`;
         }).join('')}
       </div>
@@ -1022,8 +1026,8 @@ function renderRoundEndPhase(gs) {
           const cls = change > 0 ? 'score-pos' : change < 0 ? 'score-neg' : '';
           return `<div class="result-row">
             <span>${p}</span>
-            <span class="${cls}">${change > 0 ? '+' : ''}${change}</span>
-            <span style="color:var(--text-muted)">(합계: ${totalScores[p]})</span>
+            <span class="${cls}">${change > 0 ? '+' : ''}${change}pt</span>
+            <span style="color:var(--text-muted)">(합계: ${totalScores[p]}pt)</span>
           </div>`;
         }).join('')}
       </div>
@@ -1067,7 +1071,7 @@ async function nextRound(totalScores) {
     id: gsId,
     room_id: onlineState.currentRoom,
     round: nextRound,
-    phase: 'deal_miss',
+    phase: 'bidding',
     hands,
     floor_cards: floorCards,
     bids: {},
@@ -1102,7 +1106,7 @@ function renderGameEndPhase(gs) {
           const cls = score > 0 ? 'score-pos' : score < 0 ? 'score-neg' : '';
           return `<div class="result-row rank-${i+1}">
             <span>${medals[i] || (i+1)+'위'} ${p}</span>
-            <span class="${cls}" style="font-weight:800">${score > 0 ? '+' : ''}${score}</span>
+            <span class="${cls}" style="font-weight:800">${score > 0 ? '+' : ''}${score}pt</span>
           </div>`;
         }).join('')}
       </div>
