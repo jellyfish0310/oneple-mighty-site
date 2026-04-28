@@ -236,11 +236,18 @@ function changeNickname() {
 // ── 방 만들기 ──────────────────────────────────────────────
 
 async function createRoom() {
+  const btn = document.querySelector('#create-room-modal .btn-confirm');
+  if (btn) { btn.disabled = true; btn.textContent = '생성 중...'; }
+
   const name = document.getElementById('room-name-input').value.trim();
   const rounds = parseInt(document.getElementById('room-rounds-input').value) || 5;
   const password = document.getElementById('room-pw-input').value.trim();
 
-  if (!name) { alert('방 이름을 입력해주세요!'); return; }
+  if (!name) {
+    alert('방 이름을 입력해주세요!');
+    if (btn) { btn.disabled = false; btn.textContent = '만들기'; }
+    return;
+  }
 
   const roomId = Date.now().toString();
   const { error } = await sbClient.from('rooms').insert({
@@ -253,7 +260,11 @@ async function createRoom() {
     status: 'waiting',
   });
 
-  if (error) { alert('방 만들기 실패: ' + error.message); return; }
+  if (error) {
+    alert('방 만들기 실패: ' + error.message);
+    if (btn) { btn.disabled = false; btn.textContent = '만들기'; }
+    return;
+  }
 
   hideCreateRoom();
   onlineState.currentRoom = roomId;
