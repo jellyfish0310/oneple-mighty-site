@@ -7,10 +7,16 @@ let sbClient = null;
 
 function initSupabase() {
   if (!ONLINE_CONFIG || !ONLINE_CONFIG.SUPABASE_URL || ONLINE_CONFIG.SUPABASE_URL === 'YOUR_SUPABASE_URL') return false;
-  if (!window.supabase) { console.error('Supabase SDK not loaded'); return false; }
-  if (!sbClient) {
-    sbClient = window.sbClient.createClient(ONLINE_CONFIG.SUPABASE_URL, ONLINE_CONFIG.SUPABASE_ANON_KEY);
+  if (sbClient) return true;
+
+  const sdk = window.__sb__;
+  if (!sdk || !sdk.createClient) {
+    console.error('SDK not ready:', sdk);
+    return false;
   }
+
+  sbClient = sdk.createClient(ONLINE_CONFIG.SUPABASE_URL, ONLINE_CONFIG.SUPABASE_ANON_KEY);
+  console.log('Supabase connected!', !!sbClient);
   return true;
 }
 
