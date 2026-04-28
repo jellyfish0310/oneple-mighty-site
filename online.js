@@ -34,6 +34,13 @@ const SUITS = ['스', '다', '클', '하']; // 스페이드, 다이아, 클럽, 
 const SUIT_COLORS = { '스': '#1a1f5e', '다': '#d4a017', '클': '#22c55e', '하': '#ef4444' };
 const SUIT_SYMBOLS = { '스': '♠', '다': '◆', '클': '♣', '하': '♥' };
 const RANKS = ['2','3','4','5','6','7','8','9','10','J','Q','K','A'];
+
+function getSuitDisplay(suit) {
+  const map = {'스':'♠ 스페이드','다':'◆ 다이아','클':'♣ 클로버','하':'♥ 하트','노기루':'노기루'};
+  return map[suit] || suit;
+}
+
+
 const RANK_SCORES = { '10':1, 'J':1, 'Q':1, 'K':1, 'A':1 }; // 딜미스 계산용
 
 function createDeck() {
@@ -368,7 +375,7 @@ function renderWaitingRoom(room) {
     <div class="waiting-room">
       <div class="waiting-header">
         <h2 class="waiting-title">${room.name}</h2>
-        <p class="waiting-meta">${room.max_rounds}라운드 · 방장: ${room.host}</p>
+        <p class="waiting-meta">총 ${room.max_rounds}라운드 · 방장: ${room.host}</p>
       </div>
       <div class="player-slots">
         ${Array(5).fill(0).map((_, i) => `
@@ -580,7 +587,7 @@ function renderBiddingPhase(gs) {
       </div>
       <div class="bids-display">
         ${Object.entries(gs.bids || {}).filter(([k]) => !k.startsWith('_')).map(([p, b]) =>
-          `<span class="bid-item">${p}: ${b.passed ? '패스' : b.amount + (b.suit ? ' ' + b.suit : '')}</span>`
+          `<span class="bid-item">${p}: ${b.passed ? '패스' : b.amount + (b.suit ? ' ' + getSuitDisplay(b.suit) : '')}</span>`
         ).join('')}
       </div>
       <div class="my-hand-area">
@@ -764,7 +771,7 @@ function renderFloorCardsPrePhase(gs) {
     <div class="game-phase-container">
       <div class="phase-header">
         <span class="phase-badge">바닥패 확인 전</span>
-        <span class="phase-info">주공: ${gs.jugong} | 공약: ${gs.contract} ${gs.contract_suit}</span>
+        <span class="phase-info">주공: ${gs.jugong} | 공약: ${gs.contract} ${getSuitDisplay(gs.contract_suit)}</span>
       </div>
       ${isJugong ? `
         <p class="action-hint">바닥패를 확인하기 전에 공약을 변경할 수 있어요. (변경 시 +1)<br>
@@ -838,7 +845,7 @@ function renderFloorCardsPhase(gs) {
     <div class="game-phase-container">
       <div class="phase-header">
         <span class="phase-badge">바닥패 확인</span>
-        <span class="phase-info">주공: ${gs.jugong} | 공약: ${gs.contract} ${gs.contract_suit}</span>
+        <span class="phase-info">주공: ${gs.jugong} | 공약: ${gs.contract} ${getSuitDisplay(gs.contract_suit)}</span>
       </div>
       ${isJugong ? `
         <p class="action-hint">손패+바닥패 포함 13장 중 3장을 버려주세요.<br>
@@ -943,21 +950,21 @@ function renderFriendSelectPhase(gs) {
     <div class="game-phase-container">
       <div class="phase-header">
         <span class="phase-badge">프렌드 선택</span>
-        <span class="phase-info">주공: ${gs.jugong} | 공약: ${gs.contract} ${gs.contract_suit}</span>
+        <span class="phase-info">주공: ${gs.jugong} | 공약: ${gs.contract} ${getSuitDisplay(gs.contract_suit)}</span>
       </div>
       ${isJugong ? `
         <p class="action-hint">프렌드 카드를 선택하거나 노프렌드를 선언하세요</p>
         <div style="display:flex;flex-direction:column;gap:0.75rem;margin-top:0.5rem">
           <div style="display:flex;gap:0.5rem;flex-wrap:wrap">
-            <select id="friend-suit" style="flex:1;min-width:120px;border:1.5px solid var(--border);border-radius:10px;padding:0.6rem 0.75rem;font-size:0.95rem">
+            <select id="friend-suit" style="flex:1;min-width:120px;border:1.5px solid var(--border);border-radius:10px;padding:0.6rem 0.75rem;font-size:0.95rem" onchange="toggleFriendRank()">
               <option value="스">♠ 스페이드</option>
               <option value="다">◆ 다이아</option>
               <option value="클">♣ 클럽</option>
               <option value="하">♥ 하트</option>
+              <option value="JK">🃏 조커</option>
             </select>
             <select id="friend-rank" style="flex:1;min-width:100px;border:1.5px solid var(--border);border-radius:10px;padding:0.6rem 0.75rem;font-size:0.95rem">
               ${RANKS.map(r => `<option value="${r}">${r}</option>`).join('')}
-              <option value="JK">조커</option>
             </select>
           </div>
           <button class="game-btn btn-primary" onclick="selectFriend()" style="width:100%">프렌드 선언</button>
@@ -970,11 +977,17 @@ function renderFriendSelectPhase(gs) {
     </div>`;
 }
 
+function toggleFriendRank() {
+  const suit = document.getElementById('friend-suit').value;
+  const rankSel = document.getElementById('friend-rank');
+  if (rankSel) rankSel.style.display = suit === 'JK' ? 'none' : '';
+}
+
 async function selectFriend() {
   const gs = onlineState.gameState;
   const suit = document.getElementById('friend-suit').value;
   const rank = document.getElementById('friend-rank').value;
-  const friendCard = rank === 'JK' ? 'JK' : suit + rank;
+  const friendCard = suit === 'JK' ? 'JK' : suit + rank;
 
   const room = await sbClient.from('rooms').select('*').eq('id', onlineState.currentRoom).single();
   const players = room.data.players;
@@ -1026,10 +1039,10 @@ function renderPlayingPhase(gs) {
   document.getElementById('game-area').innerHTML = `
     <div class="game-phase-container playing-phase">
       <div class="phase-header">
-        <span class="phase-badge">플레이</span>
-        <span class="phase-info">주공: ${gs.jugong} | ${gs.contract}${gs.contract_suit}${gs.no_giru?' 노기루':''}</span>
+        <span class="phase-badge">플레이 ${gs.round}/${onlineState.roomData ? onlineState.roomData.max_rounds : '?'}R</span>
+        <span class="phase-info">주공: ${gs.jugong} | ${gs.contract} ${getSuitDisplay(gs.contract_suit)}</span>
         ${friendReveal}
-        ${(gs.bids && gs.bids._joker_lead_suit) ? `<span class="friend-badge" style="background:#fef9c3;color:#92400e">🃏 조커선언: ${gs.bids._joker_lead_suit}</span>` : ''}
+        ${(gs.bids && gs.bids._joker_lead_suit) ? `<span class="friend-badge" style="background:#fef9c3;color:#92400e">🃏 조커선언: ${getSuitDisplay(gs.bids._joker_lead_suit)}</span>` : ''}
       </div>
       <div class="score-board">
         ${players.map(p => {
@@ -1176,7 +1189,11 @@ async function playCard(cardId) {
       alert('첫 판에는 기루 패를 낼 수 없어요!');
       return;
     }
-    // 조커도 첫 판 효력 없지만 낼 수는 있음 (일반카드 취급)
+    // 조커 첫 판 경고
+    if (playingCard.id === 'JK' && currentTrickArr.length === 0) {
+      const ok = confirm('첫 판에 조커를 내면 효력이 없어요!\n조커가 가장 약한 카드가 됩니다.\n그래도 내시겠어요?');
+      if (!ok) return;
+    }
   }
 
   // ── 조커콜: 조커 있는 사람은 조커만 낼 수 있음 ──
