@@ -138,10 +138,16 @@ body {
 .sub-header {
   display: flex;
   align-items: center;
-  gap: 0.75rem;
+  gap: 0.5rem;
   margin-bottom: 1.25rem;
   padding-top: 0.5rem;
   flex-wrap: nowrap;
+  overflow: visible;
+}
+
+.sub-header .sub-logo {
+  flex: 1;
+  min-width: 0;
   overflow: hidden;
 }
 
@@ -507,15 +513,15 @@ body {
 
 .tutorial-btn {
   background: none; border: 1.5px solid var(--border); border-radius: 8px;
-  padding: 0.4rem 0.75rem; font-size: 0.82rem; cursor: pointer; color: var(--text-muted);
-  transition: all 0.15s; white-space: nowrap;
+  padding: 0.4rem 0.6rem; font-size: 0.78rem; cursor: pointer; color: var(--text-muted);
+  transition: all 0.15s; white-space: nowrap; flex-shrink: 0;
 }
 .tutorial-btn:hover { background: var(--navy); color: #fff; border-color: var(--navy); }
 
 .create-room-btn {
   background: var(--orange); color: #fff; border: none; border-radius: 8px;
-  padding: 0.45rem 0.9rem; font-size: 0.85rem; font-weight: 700; cursor: pointer;
-  transition: filter 0.15s; white-space: nowrap;
+  padding: 0.45rem 0.75rem; font-size: 0.82rem; font-weight: 700; cursor: pointer;
+  transition: filter 0.15s; white-space: nowrap; flex-shrink: 0;
 }
 .create-room-btn:hover { filter: brightness(1.1); }
 
