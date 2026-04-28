@@ -116,10 +116,11 @@ function getWinner(trick, giru, mightyId, jokerCallerId, noGiru) {
 
 // ── 방 목록 페이지 ─────────────────────────────────────────
 async function loadOnlinePage() {
-  // Supabase 초기화 - 최대 3초 대기
+  // Supabase 초기화 - 최대 5초 대기
   if (!sbClient) {
-    for (let i = 0; i < 10; i++) {
-      if (window.supabase) { initSupabase(); break; }
+    for (let i = 0; i < 15; i++) {
+      const sdk = window.supabase || window.Supabase;
+      if (sdk && sdk.createClient) { initSupabase(); break; }
       await new Promise(r => setTimeout(r, 300));
     }
   }
